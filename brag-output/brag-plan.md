@@ -1,5 +1,20 @@
 # Brag Plan: Allsvenskantipset
 
+> **Version 2 (gällande):** adminkapitlet (Tipskontoret) är borttaget. Chattrummet har lagts till som scen 7, och musiken är ett eget komponerat läktarhype-spår (`work/make_music.py`: 120 BPM, trummor, stadionhorn, läktarkör, publikvrål och tuta). Längd 25 s.
+>
+> | # | Scen | Tid |
+> |---|---|---|
+> | 1 | Excel-hooken | 0–3 |
+> | 2 | "Nu: en egen app." (drop + tuta 3.0) | 3–6 |
+> | 3 | Gå med (lag, avatar, Swish) | 6–9 |
+> | 4 | Tippa (dubbletter röda) | 9–12 |
+> | 5 | Allsvenskan live (läktarkören in) | 12–15.5 |
+> | 6 | Tipstabellen + utmärkelser (tuta 15.5) | 15.5–18.5 |
+> | 7 | Chatten: bubblor en i taget, eget meddelande skrivs och skickas ("Guldet är vårt! ⚽🔥") | 18.5–22 |
+> | 8 | Heroes → logga + "Är du nästa hero?" (slutträff 23.0) | 22–25 |
+>
+> Nedan står den ursprungliga planen (version 1) kvar som referens.
+
 ## What is this app?
 Kompisgängets eget tips på Allsvenskans sluttabell sedan 2015 – nu en egen app i stället för ett Excel-ark som mejlas runt. Minst antal fel vinner muggen, vandringspriset och potten.
 
