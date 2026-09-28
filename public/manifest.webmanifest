@@ -1,0 +1,11 @@
+{
+  "name": "Allsvenskantipset",
+  "short_name": "Tipset",
+  "description": "Tippa Allsvenskans sluttabell – minst antal fel vinner.",
+  "start_url": "/min-sida",
+  "display": "standalone",
+  "background_color": "#050b08",
+  "theme_color": "#050b08",
+  "lang": "sv",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

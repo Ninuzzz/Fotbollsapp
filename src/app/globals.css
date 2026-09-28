@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+/*
+ * Allsvenskantipset – designsystem
+ * Mörk "kvällsmatch"-känsla: nattsvart plan, gräsgrönt, strålkastarljus och Allsvenskans guld.
+ * --team / --team-2 sätts per användare från favoritlaget (personalisering).
+ */
+:root {
+  --bg: #050b08;
+  --surface: #0b1611;
+  --surface-2: #102019;
+  --surface-3: #162c22;
+  --border: #1f3a2d;
+  --border-strong: #2d5240;
+  --text: #ecf6f0;
+  --muted: #9bb3a6;
+  --faint: #6b8579;
+  --pitch: #22c55e;
+  --pitch-dim: #14532d;
+  --gold: #f5c518;
+  --gold-dim: #4d3d05;
+  --danger: #f05252;
+  --danger-dim: #4a1515;
+  --info: #3b82f6;
+  --team: #22c55e;
+  --team-2: #ffffff;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-pitch: var(--pitch);
+  --color-pitch-dim: var(--pitch-dim);
+  --color-gold: var(--gold);
+  --color-gold-dim: var(--gold-dim);
+  --color-danger: var(--danger);
+  --color-danger-dim: var(--danger-dim);
+  --color-info: var(--info);
+  --color-team: var(--team);
+  --color-team-2: var(--team-2);
+  --font-display: var(--font-bebas), "Impact", sans-serif;
+  --font-sans: var(--font-source), system-ui, sans-serif;
+}
+
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Planlinjer i bakgrunden */
+.pitch-bg {
+  background:
+    radial-gradient(1200px 500px at 50% -10%, color-mix(in oklab, var(--team) 22%, transparent), transparent 70%),
+    radial-gradient(800px 400px at 110% 10%, color-mix(in oklab, var(--gold) 10%, transparent), transparent 70%),
+    var(--bg);
+}
+
+.pitch-lines {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--pitch) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--pitch) 7%, transparent) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}
+
+/* Gräsränder */
+.grass {
+  background: repeating-linear-gradient(90deg, #0d2418 0 80px, #0b1f15 80px 160px);
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+  line-height: 0.95;
+}
+
+.card {
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+}
+
+.glow-gold {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--gold) 45%, transparent), 0 10px 40px -10px color-mix(in oklab, var(--gold) 45%, transparent);
+}
+
+.text-gradient-gold {
+  background: linear-gradient(180deg, #fff3b0, var(--gold) 55%, #b88a00);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible,
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+/* Säker yta för bottennavigering på mobil */
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 5.5rem);
+}
+@media (min-width: 768px) {
+  .pb-safe {
+    padding-bottom: 3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes ball-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+@keyframes shimmer {
+  to {
+    background-position: 200% center;
+  }
+}
+.shimmer {
+  background: linear-gradient(90deg, var(--gold) 0%, #fff7c2 25%, var(--gold) 50%, #fff7c2 75%, var(--gold) 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 6s linear infinite;
+}

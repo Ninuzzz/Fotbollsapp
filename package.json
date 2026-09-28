@@ -1,0 +1,61 @@
+{
+  "name": "allsvenskantipset",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest run",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
+    "vapid": "web-push generate-vapid-keys --json"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@prisma/client": "^6.19.0",
+    "bcryptjs": "^3.0.2",
+    "fast-xml-parser": "^5.2.5",
+    "lucide-react": "^0.544.0",
+    "motion": "^12.23.0",
+    "next": "15.5.26",
+    "qrcode": "^1.5.4",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "recharts": "^3.2.1",
+    "web-push": "^3.6.7",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.26",
+    "prisma": "^6.19.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.20.0",
+    "typescript": "^5",
+    "vitest": "^3.2.4"
+  },
+  "allowScripts": {
+    "prisma": true,
+    "@prisma/client": true,
+    "@prisma/engines": true,
+    "esbuild": true,
+    "sharp": true,
+    "unrs-resolver": true
+  },
+  "overrides": {
+    "postcss": "^8.5.23",
+    "deepmerge-ts": "^8.0.0"
+  }
+}

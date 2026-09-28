@@ -1,0 +1,341 @@
+// Allsvenskantipset – datamodell
+// SQLite för enkel drift (en fil, fungerar på Fly.io med volym).
+// Byt provider till "postgresql" för större drift – modellen är portabel.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  passwordHash   String
+  role           String   @default("USER") // USER | ADMIN
+  favoriteTeamId String?
+  favoriteTeam   Team?    @relation(fields: [favoriteTeamId], references: [id])
+  // Avatar: antingen en tröj-avatar ("jersey:<mönster>:<färg1>:<färg2>:<nummer>") eller en uppladdad bild (data-URL)
+  avatar         String   @default("jersey:solid:#1d4ed8:#facc15:10")
+  // Notisinställningar
+  notifyDeadline Boolean  @default(true)
+  notifyNews     Boolean  @default(true)
+  notifyResults  Boolean  @default(true)
+  notifyAwards   Boolean  @default(true)
+  notifyChat     Boolean  @default(false)
+  privacyAcceptedAt DateTime? // när användaren godkände integritetspolicyn
+  createdAt      DateTime @default(now())
+
+  sessions      Session[]
+  entries       Entry[]
+  messages      ChatMessage[]
+  pushSubs      PushSubscription[]
+  reads         NotificationRead[]
+  following     Follow[]           @relation("follower")
+  followers     Follow[]           @relation("followed")
+  notifications Notification[]     @relation("author")
+  heroes        HallOfFame[]
+  history       HistoricalResult[]
+}
+
+model Session {
+  id        String   @id // slumpad token (hashad)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// En tävling, t.ex. "Tips Allsvenskan 2026"
+model Season {
+  id                   String   @id @default(cuid())
+  name                 String
+  year                 Int      @unique
+  startDate            DateTime // seriestart
+  registrationDeadline DateTime // sista anmälningsdag
+  editDeadline         DateTime // sista dag att ändra tipset
+  entryFee             Int      @default(111)
+  swishNumber          String   @default("0733-364314")
+  reservedAmount       Int      @default(600) // avsatt till mugg, vandringspris & tröstpris
+  prizeSplit           String   @default("50,30,20")
+  isActive             Boolean  @default(false)
+  isFinished           Boolean  @default(false)
+  apiLeagueId          Int      @default(113) // API-Football: Allsvenskan
+  totalRounds          Int      @default(30)
+  createdAt            DateTime @default(now())
+
+  teams     SeasonTeam[]
+  players   Player[]
+  entries   Entry[]
+  snapshots StandingSnapshot[]
+  messages  ChatMessage[]
+  odds      OddsQuote[]
+  awards    Award[]
+}
+
+/// Lag återanvänds mellan år – kopplas till säsong via SeasonTeam
+model Team {
+  id             String  @id @default(cuid())
+  name           String  @unique // "Malmö FF"
+  shortName      String // "MFF"
+  aliases        String  @default("") // kommaseparerat, för namnmatchning mot API ("Malmo FF,Malmö")
+  primaryColor   String  @default("#1e3a8a")
+  secondaryColor String  @default("#ffffff")
+  logoUrl        String?
+  apiTeamId      Int?
+  espnId         Int?
+  starPlayer     String? // stjärnspelare som visas i personlig vy
+  starPlayerPhoto String?
+
+  seasons   SeasonTeam[]
+  players   Player[]
+  tipRows   TipRow[]
+  standings StandingRow[]
+  fans      User[]
+  odds      OddsQuote[]
+}
+
+model SeasonTeam {
+  seasonId String
+  teamId   String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([seasonId, teamId])
+}
+
+model Player {
+  id          String  @id @default(cuid())
+  seasonId    String
+  season      Season  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  teamId      String
+  team        Team    @relation(fields: [teamId], references: [id])
+  name        String
+  photoUrl    String?
+  apiPlayerId Int?
+  espnId      Int?
+  photoChecked Boolean @default(false) // har vi letat foto hos TheSportsDB?
+  goals       Int     @default(0)
+  assists     Int     @default(0)
+
+  scorerTips Entry[] @relation("scorerTip")
+  assistTips Entry[] @relation("assistTip")
+
+  @@unique([seasonId, name, teamId])
+}
+
+/// En spelares deltagande + tips för en säsong
+model Entry {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seasonId       String
+  season         Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  // Betalning (Swish, bekräftas manuellt av admin)
+  paymentStatus  String    @default("PENDING") // PENDING | CLAIMED | CONFIRMED
+  paidBy         String? // namn/initialer om någon annan swishat
+  paymentNote    String?
+  paidAt         DateTime?
+  // Tips
+  topScorerId    String?
+  topScorer      Player?   @relation("scorerTip", fields: [topScorerId], references: [id])
+  topAssistId    String?
+  topAssist      Player?   @relation("assistTip", fields: [topAssistId], references: [id])
+  submittedAt    DateTime?
+  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
+  freeEntry      Boolean   @default(false) // tröstpris från förra året
+
+  rows     TipRow[]
+  rankings LeaderboardRow[]
+
+  @@unique([userId, seasonId])
+}
+
+model TipRow {
+  entryId  String
+  entry    Entry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  position Int
+  teamId   String
+  team     Team   @relation(fields: [teamId], references: [id])
+
+  @@id([entryId, position])
+  @@unique([entryId, teamId])
+}
+
+/// En uppdatering av den verkliga tabellen (från API eller manuellt)
+model StandingSnapshot {
+  id        String   @id @default(cuid())
+  seasonId  String
+  season    Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  round     Int // antal spelade omgångar (max MP)
+  source    String   @default("MANUAL") // API | MANUAL | SEED
+  createdAt DateTime @default(now())
+
+  rows        StandingRow[]
+  leaderboard LeaderboardRow[]
+  awards      Award[]
+
+  @@index([seasonId, createdAt])
+}
+
+model StandingRow {
+  snapshotId String
+  snapshot   StandingSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  teamId     String
+  team       Team             @relation(fields: [teamId], references: [id])
+  position   Int
+  played     Int
+  won        Int
+  drawn      Int
+  lost       Int
+  goalsFor   Int
+  goalsAgainst Int
+  points     Int
+  form       String           @default("") // t.ex. "WWDLW"
+
+  @@id([snapshotId, teamId])
+}
+
+/// Tipstabellen vid en viss uppdatering – används för trender & utmärkelser
+model LeaderboardRow {
+  snapshotId String
+  snapshot   StandingSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  entryId    String
+  entry      Entry            @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  rank       Int
+  errors     Int
+  exact      Int
+  scorerGap  Int?
+  assistGap  Int?
+
+  @@id([snapshotId, entryId])
+}
+
+/// Veckans raket / djupdykning / jojo
+model Award {
+  id         String           @id @default(cuid())
+  seasonId   String
+  season     Season           @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  snapshotId String
+  snapshot   StandingSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  kind       String // ROCKET | DIVE | YOYO
+  entryId    String
+  delta      Int
+  createdAt  DateTime         @default(now())
+}
+
+model Follow {
+  followerId String
+  followedId String
+  follower   User   @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followed   User   @relation("followed", fields: [followedId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followedId])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  seasonId  String
+  season    Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([seasonId, createdAt])
+}
+
+/// Utskick – visas i notis-inkorgen och skickas som push
+model Notification {
+  id        String   @id @default(cuid())
+  type      String // DEADLINE | NEWS | RESULTS | AWARD | GENERAL
+  title     String
+  body      String
+  imageUrl  String?
+  link      String?
+  audience  String   @default("ALL") // ALL | MISSING_TIPS | PAID | ADMIN | USER
+  targetUserId String? // när audience = USER
+  authorId  String?
+  author    User?    @relation("author", fields: [authorId], references: [id], onDelete: SetNull)
+  pushed    Int      @default(0)
+  createdAt DateTime @default(now())
+
+  reads NotificationRead[]
+}
+
+model NotificationRead {
+  userId         String
+  notificationId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  readAt         DateTime     @default(now())
+
+  @@id([userId, notificationId])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+}
+
+/// Odds från spelbolag (hämtade via API eller inlagda av admin)
+model OddsQuote {
+  id        String   @id @default(cuid())
+  seasonId  String
+  season    Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  bookmaker String
+  market    String   @default("WINNER") // WINNER | RELEGATION
+  odds      Float
+  source    String   @default("MANUAL")
+  updatedAt DateTime @updatedAt
+
+  @@unique([seasonId, teamId, bookmaker, market])
+}
+
+model HallOfFame {
+  id          String  @id @default(cuid())
+  year        Int     @unique
+  name        String
+  description String  @default("")
+  imageUrl    String?
+  errors      Int?
+  // GDPR: namn och bild visas publikt först när vinnaren har gett sitt samtycke
+  consent     Boolean @default(false)
+  userId      String?
+  user        User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+/// Slutresultat från tidigare år (import från Excel) för all-time-statistik
+model HistoricalResult {
+  id          String  @id @default(cuid())
+  year        Int
+  name        String
+  rank        Int
+  errors      Int
+  exact       Int?
+  scorerGoals Int?
+  rankHistory String  @default("[]") // JSON: placering per omgång
+  userId      String?
+  user        User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([year, name])
+}
+
+model Setting {
+  key   String @id
+  value String
+}

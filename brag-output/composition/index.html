@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Allsvenskantipset – brag</title>
+    <script src="assets/gsap.min.js"></script>
+    <script src="assets/audio-bass.js"></script>
+    <style>
+      @font-face {
+        font-family: "Bebas Neue";
+        src: url("assets/bebas-latin.woff2") format("woff2");
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Source Sans 3";
+        src: url("assets/ss3-latin.woff2") format("woff2");
+        font-weight: 200 900;
+        font-display: block;
+      }
+      :root {
+        --bg: #050b08;
+        --surface: #0b1611;
+        --surface-2: #102019;
+        --border: #1f3a2d;
+        --border-strong: #2d5240;
+        --text: #ecf6f0;
+        --muted: #9bb3a6;
+        --gold: #f5c518;
+        --pitch: #22c55e;
+        --danger: #f05252;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Source Sans 3", system-ui, sans-serif;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+
+      /* ── Bakgrund: planlinjer + strålkastarglöd ── */
+      #bg-grid {
+        position: absolute;
+        inset: -80px;
+        background-image:
+          linear-gradient(to right, rgba(34, 197, 94, 0.07) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(34, 197, 94, 0.07) 1px, transparent 1px);
+        background-size: 64px 64px;
+        -webkit-mask-image: radial-gradient(ellipse at center, black 25%, transparent 75%);
+        mask-image: radial-gradient(ellipse at center, black 25%, transparent 75%);
+      }
+      #bg-glow {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(1100px 520px at 50% -8%, rgba(34, 197, 94, 0.26), transparent 70%),
+          radial-gradient(760px 420px at 104% 12%, rgba(245, 197, 24, 0.16), transparent 70%);
+        opacity: 0.7;
+      }
+      #bg-circle {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 900px;
+        height: 900px;
+        margin: -450px 0 0 -450px;
+        border-radius: 50%;
+        border: 2px solid rgba(34, 197, 94, 0.1);
+      }
+      #bg-line {
+        position: absolute;
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        margin-left: -1px;
+        background: rgba(34, 197, 94, 0.08);
+      }
+
+      /* ── Typografi ── */
+      .kicker {
+        font-weight: 700;
+        font-size: 24px;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: var(--gold);
+      }
+      .display {
+        font-family: "Bebas Neue", sans-serif;
+        letter-spacing: 0.01em;
+        line-height: 1.06;
+        margin: 0;
+        font-weight: 400;
+      }
+      .gold {
+        color: var(--gold);
+      }
+      .shimmer {
+        background: linear-gradient(180deg, #fff3b0, #f5c518 55%, #b88a00);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      /* ── Webbläsarram för skärmdumpar ── */
+      .shot {
+        position: absolute;
+        border-radius: 22px;
+        overflow: hidden;
+        background: var(--surface);
+        border: 1px solid var(--border-strong);
+        box-shadow:
+          0 40px 90px -30px rgba(0, 0, 0, 0.9),
+          0 0 0 1px rgba(245, 197, 24, 0.06);
+      }
+      .shot .bar {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 18px;
+        background: #0e1c15;
+        border-bottom: 1px solid var(--border);
+      }
+      .shot .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #29463a;
+      }
+      .shot .url {
+        margin-left: 16px;
+        font-size: 16px;
+        color: var(--muted);
+        background: #07110c;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 3px 16px;
+      }
+      .shot .view {
+        position: relative;
+        overflow: hidden;
+      }
+      .shot img.screen {
+        display: block;
+        width: 100%;
+      }
+      .halo {
+        position: absolute;
+        border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(245, 197, 24, 0.28), transparent);
+        filter: blur(10px);
+      }
+
+      .copy {
+        position: absolute;
+        left: 110px;
+        top: 250px;
+        width: 520px;
+      }
+      .copy .display {
+        font-size: 104px;
+        margin-top: 18px;
+      }
+      .copy .line {
+        display: block;
+      }
+
+      /* Muspekare */
+      #cursor {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 44px;
+        height: 44px;
+        opacity: 0;
+        z-index: 50;
+        filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.6));
+      }
+      .ripple {
+        position: absolute;
+        width: 70px;
+        height: 70px;
+        margin: -35px 0 0 -35px;
+        border-radius: 50%;
+        border: 3px solid var(--gold);
+        opacity: 0;
+        z-index: 49;
+      }
+      .ring {
+        position: absolute;
+        border-radius: 14px;
+        border: 3px solid var(--gold);
+        box-shadow: 0 0 28px rgba(245, 197, 24, 0.55);
+        opacity: 0;
+      }
+      .ring.red {
+        border-color: var(--danger);
+        box-shadow: 0 0 30px rgba(240, 82, 82, 0.7);
+      }
+
+      /* Utmärkelsekort (återskapade från appens AwardCards) */
+      .awards {
+        position: absolute;
+        left: 690px;
+        top: 700px;
+        width: 1130px;
+        display: flex;
+        gap: 22px;
+      }
+      .award {
+        flex: 1;
+        height: 190px;
+        box-sizing: border-box;
+        border-radius: 20px;
+        border: 1px solid var(--border-strong);
+        padding: 22px 24px;
+        background: linear-gradient(135deg, var(--tone-bg), #0b1611 70%);
+        box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.8);
+      }
+      .award .label {
+        font-weight: 800;
+        font-size: 18px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--tone);
+      }
+      .award .who {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 22px;
+      }
+      .award .jersey {
+        width: 62px;
+        height: 62px;
+        border-radius: 50%;
+        background: #162c22;
+        border: 2px solid var(--border-strong);
+        display: grid;
+        place-items: center;
+      }
+      .award .name {
+        font-weight: 700;
+        font-size: 30px;
+        color: var(--tone);
+      }
+      .award .delta {
+        font-size: 22px;
+        color: var(--muted);
+      }
+
+      /* Admin-checklista */
+      .checklist {
+        position: absolute;
+        left: 110px;
+        top: 450px;
+        width: 520px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .checklist li {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        font-size: 34px;
+        font-weight: 700;
+        line-height: 1.15;
+        margin-bottom: 26px;
+        opacity: 0;
+      }
+      .checklist .tick {
+        flex: none;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--pitch);
+        display: grid;
+        place-items: center;
+        margin-top: 1px;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 34px;
+        padding: 12px 20px;
+        border-radius: 999px;
+        border: 1px solid rgba(34, 197, 94, 0.4);
+        background: rgba(20, 83, 45, 0.45);
+        color: var(--pitch);
+        font-weight: 700;
+        font-size: 24px;
+      }
+      .chip i {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--pitch);
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="brag" data-start="0" data-width="1920" data-height="1080" data-duration="31">
+      <!-- Bakgrund (hela videon) -->
+      <div id="bg" class="clip" data-start="0" data-duration="31" data-track-index="0">
+        <div id="bg-glow"></div>
+        <div id="bg-grid"></div>
+        <div id="bg-circle"></div>
+        <div id="bg-line"></div>
+      </div>
+
+      <!-- 1. Excel-hooken -->
+      <section id="s1" class="clip" data-start="0" data-duration="3" data-track-index="1">
+        <div id="s1-copy" style="position: absolute; left: 150px; top: 300px; width: 1020px">
+          <div id="s1-kicker" class="kicker">Allsvenskantipset · sedan 2015</div>
+          <h1 class="display" style="font-size: 170px; margin-top: 22px">
+            <span id="s1-l1" class="line" style="display: block">Sedan 2015:</span>
+            <span id="s1-l2" class="line gold" style="display: block">ett Excel-ark.</span>
+          </h1>
+        </div>
+        <div id="s1-excel" style="position: absolute; left: 1210px; top: 150px; width: 420px; height: 824px; border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 50px 90px -30px rgba(0, 0, 0, 0.9)">
+          <img src="assets/excel.png" alt="" style="width: 100%; height: 100%; display: block" />
+        </div>
+      </section>
+
+      <!-- 2. Avslöjandet -->
+      <section id="s2" class="clip" data-start="3" data-duration="3" data-track-index="1">
+        <h1 id="s2-title" class="display" style="position: absolute; left: 0; right: 0; top: 70px; text-align: center; font-size: 170px">
+          Nu: <span class="shimmer">en egen app.</span>
+        </h1>
+        <div id="s2-halo" class="halo" style="left: 300px; top: 320px; width: 1320px; height: 760px"></div>
+        <div id="s2-card" class="shot" style="left: 330px; top: 285px; width: 1260px">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">allsvenskantipset</span></div>
+          <div class="view" data-layout-allow-overflow><img class="screen" src="assets/s-home.png" alt="" /></div>
+        </div>
+      </section>
+
+      <!-- 3. Gå med -->
+      <section id="s3" class="clip" data-start="6" data-duration="3.5" data-track-index="1">
+        <div class="copy" id="s3-copy">
+          <div class="kicker">01 · Gå med</div>
+          <h2 class="display">
+            <span class="line">Välj lag</span><span class="line">och avatar.</span><span class="line gold">Swisha 111 kr.</span>
+          </h2>
+        </div>
+        <div id="s3-a" class="shot" style="left: 700px; top: 150px; width: 1120px">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">allsvenskantipset / registrera</span></div>
+          <div class="view" data-layout-allow-overflow>
+            <img class="screen" src="assets/s-reg-team.png" alt="" />
+            <div id="s3-ring" class="ring" style="left: 559px; top: 316px; width: 134px; height: 82px"></div>
+          </div>
+        </div>
+        <div id="s3-b" class="shot" style="left: 900px; top: 420px; width: 940px">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">steg 4 · betalning</span></div>
+          <div class="view" data-layout-allow-overflow><img class="screen" src="assets/s-reg-swish.png" alt="" /></div>
+        </div>
+      </section>
+
+      <!-- 4. Tippa -->
+      <section id="s4" class="clip" data-start="9.5" data-duration="3.5" data-track-index="1">
+        <div class="copy" id="s4-copy">
+          <div class="kicker">02 · Tippa</div>
+          <h2 class="display">
+            <span class="line">Dra lagen</span><span class="line">på plats.</span><span class="line" style="color: var(--danger)">Dubbletter</span><span class="line" style="color: var(--danger)">blir röda.</span>
+          </h2>
+        </div>
+        <div id="s4-card" class="shot" style="left: 690px; top: 140px; width: 1150px">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">allsvenskantipset / tipsa</span></div>
+          <div class="view" data-layout-allow-overflow>
+            <div id="s4-zoom" data-layout-allow-overflow style="position: relative">
+              <img class="screen" src="assets/s-tips.png" alt="" />
+              <div id="s4-r1" class="ring red" style="left: 82px; top: 188px; width: 628px; height: 44px"></div>
+              <div id="s4-r3" class="ring red" style="left: 82px; top: 284px; width: 628px; height: 44px"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Allsvenskan live -->
+      <section id="s5" class="clip" data-start="13" data-duration="4" data-track-index="1">
+        <div class="copy" id="s5-copy">
+          <div class="kicker">03 · Live</div>
+          <h2 class="display">
+            <span class="line">Tabell,</span><span class="line">logotyper och</span><span class="line">skyttekungar.</span><span class="line gold">Helt automatiskt.</span>
+          </h2>
+          <div class="chip" id="s5-chip"><i></i>Uppdateras varje timme</div>
+        </div>
+        <div id="s5-card" class="shot" style="left: 690px; top: 150px; width: 1150px">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">allsvenskantipset / allsvenskan</span></div>
+          <div class="view" data-layout-allow-overflow style="height: 647px"><img id="s5-img" class="screen" src="assets/s-scorers.png" alt="" /></div>
+        </div>
+      </section>
+
+      <!-- 6. Tipstabellen -->
+      <section id="s6" class="clip" data-start="17" data-duration="3" data-track-index="1">
+        <div class="copy" id="s6-copy">
+          <div class="kicker">04 · Tipstabellen</div>
+          <h2 class="display">
+            <span class="line">Veckans raket,</span><span class="line">djupdykning</span><span class="line gold">och jojo.</span>
+          </h2>
+        </div>
+        <div id="s6-card" class="shot" style="left: 690px; top: 90px; width: 1130px">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">allsvenskantipset / tipstabell</span></div>
+          <div class="view" data-layout-allow-overflow style="height: 560px"><img class="screen" src="assets/s-leaderboard.png" alt="" style="margin-top: -150px" /></div>
+        </div>
+        <div class="awards">
+          <div class="award" id="aw1" style="--tone: #22c55e; --tone-bg: rgba(34, 197, 94, 0.22)">
+            <div class="label">Veckans raket</div>
+            <div class="who">
+              <div class="jersey"><svg width="40" height="40" viewBox="0 0 64 64"><path d="M20 12 L27 9 Q32 13 37 9 L44 12 L55 21 L49 29 L45 26 L45 54 L19 54 L19 26 L15 29 L9 21 Z" fill="#0b0b0b" stroke="#facc15" stroke-width="2"/></svg></div>
+              <div><div class="name">Göran Falk</div><div class="delta">+9 placeringar</div></div>
+            </div>
+          </div>
+          <div class="award" id="aw2" style="--tone: #f05252; --tone-bg: rgba(240, 82, 82, 0.22)">
+            <div class="label">Veckans djupdykning</div>
+            <div class="who">
+              <div class="jersey"><svg width="40" height="40" viewBox="0 0 64 64"><path d="M20 12 L27 9 Q32 13 37 9 L44 12 L55 21 L49 29 L45 26 L45 54 L19 54 L19 26 L15 29 L9 21 Z" fill="#1d4ed8"/></svg></div>
+              <div><div class="name">Peder Lundell</div><div class="delta">−10 placeringar</div></div>
+            </div>
+          </div>
+          <div class="award" id="aw3" style="--tone: #f5c518; --tone-bg: rgba(245, 197, 24, 0.2)">
+            <div class="label">Veckans jojo</div>
+            <div class="who">
+              <div class="jersey"><svg width="40" height="40" viewBox="0 0 64 64"><path d="M20 12 L27 9 Q32 13 37 9 L44 12 L55 21 L49 29 L45 26 L45 54 L19 54 L19 26 L15 29 L9 21 Z" fill="#1d4ed8"/></svg></div>
+              <div><div class="name">Peder Lundell</div><div class="delta">34 upp &amp; ner</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. Tipskontoret (admin) -->
+      <section id="s7" class="clip" data-start="20" data-duration="8" data-track-index="1">
+        <div id="s7-chapter" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center">
+          <div class="kicker" style="font-size: 34px">Och för Anders:</div>
+          <h1 class="display shimmer" style="font-size: 260px; margin-top: 10px">Tipskontoret</h1>
+        </div>
+        <div id="s7-head" style="position: absolute; left: 110px; top: 190px; width: 540px">
+          <div class="kicker">Admin · för Anders</div>
+          <h2 class="display shimmer" style="font-size: 104px; margin-top: 12px">Tipskontoret</h2>
+        </div>
+        <ul class="checklist">
+          <li id="c1"><span class="tick"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#03170b" stroke-width="3.5"><path d="M5 12l5 5L20 7"/></svg></span><span>Ett klick: tabell &amp; ligor hämtas.</span></li>
+          <li id="c2"><span class="tick"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#03170b" stroke-width="3.5"><path d="M5 12l5 5L20 7"/></svg></span><span>Bekräfta Swish-betalningar.</span></li>
+          <li id="c3"><span class="tick"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#03170b" stroke-width="3.5"><path d="M5 12l5 5L20 7"/></svg></span><span>Nyheter och push till alla.</span></li>
+          <li id="c4"><span class="tick"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#03170b" stroke-width="3.5"><path d="M5 12l5 5L20 7"/></svg></span><span>Ny säsong. Lagen återanvänds.</span></li>
+        </ul>
+        <div id="s7-halo" class="halo" style="left: 660px; top: 180px; width: 1240px; height: 760px"></div>
+        <div id="k1" class="shot" data-layout-allow-overlap data-layout-allow-occlusion style="left: 690px; top: 180px; width: 1150px">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url" data-layout-allow-overlap>admin · översikt</span></div>
+          <div class="view" data-layout-allow-overflow>
+            <img class="screen" src="assets/a-sync.png" alt="" />
+            <div id="k1-ring" class="ring" style="left: 301px; top: 197px; width: 544px; height: 44px"></div>
+          </div>
+        </div>
+        <div id="k2" class="shot" data-layout-allow-overlap data-layout-allow-occlusion style="left: 690px; top: 180px; width: 1150px">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url" data-layout-allow-overlap>admin · deltagare</span></div>
+          <div class="view" data-layout-allow-overflow><img class="screen" src="assets/a-payments.png" alt="" /></div>
+        </div>
+        <div id="k3" class="shot" data-layout-allow-overlap data-layout-allow-occlusion style="left: 690px; top: 180px; width: 1150px">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url" data-layout-allow-overlap>admin · utskick</span></div>
+          <div class="view" data-layout-allow-overflow><img class="screen" src="assets/a-broadcast.png" alt="" /></div>
+        </div>
+        <div id="k4" class="shot" data-layout-allow-overlap data-layout-allow-occlusion style="left: 690px; top: 180px; width: 1150px">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url" data-layout-allow-overlap>admin · tävlingar</span></div>
+          <div class="view" data-layout-allow-overflow><img class="screen" src="assets/a-season.png" alt="" /></div>
+        </div>
+      </section>
+
+      <!-- 8. Heroes + logga -->
+      <section id="s8" class="clip" data-start="28" data-duration="3" data-track-index="1">
+        <div id="s8-card" class="shot" data-layout-allow-occlusion style="left: 160px; top: 70px; width: 1600px">
+          <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">allsvenskantipset / heroes</span></div>
+          <div class="view" data-layout-allow-overflow style="height: 820px"><img id="s8-img" class="screen" src="assets/s-heroes.png" alt="" /></div>
+        </div>
+        <div id="s8-scrim" style="position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(5, 11, 8, 0.82), rgba(5, 11, 8, 0.97)); opacity: 0"></div>
+        <div id="s8-end" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center">
+          <img id="s8-logo" src="assets/logo.svg" alt="" style="width: 170px; height: 170px; display: block" />
+          <h1 class="display" id="s8-q" style="font-size: 190px; margin-top: 24px; text-align: center">Är du nästa <span class="shimmer">hero?</span></h1>
+          <div id="s8-word" class="kicker" style="margin-top: 24px; font-size: 30px">Allsvenskantipset</div>
+        </div>
+      </section>
+
+      <!-- Muspekare (delad) -->
+      <svg id="cursor" viewBox="0 0 24 24"><path d="M4 2 L4 19 L8.5 14.8 L11.6 21.5 L14.6 20.1 L11.6 13.6 L18 13.6 Z" fill="#fff" stroke="#050b08" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      <div id="ripple" class="ripple"></div>
+
+      <!-- Ljud -->
+      <audio id="music" data-start="0" data-duration="31" data-track-index="10" data-volume="0.42" src="assets/music/bed-31s.mp3"></audio>
+      <audio id="sfx1" data-start="0.1" data-duration="0.6" data-track-index="11" data-volume="0.55" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="sfx2" data-start="2.55" data-duration="0.8" data-track-index="12" data-volume="0.4" src="assets/sfx/card-slide-1.ogg"></audio>
+      <audio id="sfx3" data-start="3.0" data-duration="0.6" data-track-index="13" data-volume="0.55" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx4" data-start="3.5" data-duration="0.6" data-track-index="14" data-volume="0.45" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="sfx5" data-start="7.3" data-duration="0.5" data-track-index="15" data-volume="0.55" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="sfx6" data-start="7.85" data-duration="0.8" data-track-index="16" data-volume="0.45" src="assets/sfx/card-slide-1.ogg"></audio>
+      <audio id="sfx7" data-start="9.5" data-duration="0.6" data-track-index="11" data-volume="0.6" src="assets/sfx/impactSoft_medium_004.ogg"></audio>
+      <audio id="sfx8" data-start="11.0" data-duration="0.5" data-track-index="12" data-volume="0.7" src="assets/sfx/click_003.ogg"></audio>
+      <audio id="sfx9" data-start="13.0" data-duration="0.6" data-track-index="13" data-volume="0.45" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="sfx10" data-start="17.0" data-duration="0.6" data-track-index="14" data-volume="0.55" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx11" data-start="17.5" data-duration="0.6" data-track-index="15" data-volume="0.4" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="sfx12" data-start="18.5" data-duration="0.6" data-track-index="16" data-volume="0.4" src="assets/sfx/drop_002.ogg"></audio>
+      <audio id="sfx13" data-start="20.0" data-duration="1" data-track-index="11" data-volume="0.5" src="assets/sfx/impactSoft_heavy_003.ogg"></audio>
+      <audio id="sfx14" data-start="21.5" data-duration="0.8" data-track-index="12" data-volume="0.45" src="assets/sfx/card-slide-1.ogg"></audio>
+      <audio id="sfx15" data-start="22.2" data-duration="0.5" data-track-index="13" data-volume="0.55" src="assets/sfx/mouseclick1.ogg"></audio>
+      <audio id="sfx16" data-start="23.0" data-duration="0.8" data-track-index="14" data-volume="0.45" src="assets/sfx/card-slide-1.ogg"></audio>
+      <audio id="sfx17" data-start="24.5" data-duration="0.8" data-track-index="15" data-volume="0.45" src="assets/sfx/card-slide-1.ogg"></audio>
+      <audio id="sfx18" data-start="26.0" data-duration="0.8" data-track-index="16" data-volume="0.45" src="assets/sfx/card-slide-1.ogg"></audio>
+      <audio id="sfx19" data-start="28.0" data-duration="0.6" data-track-index="11" data-volume="0.45" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="sfx20" data-start="29.0" data-duration="2" data-track-index="12" data-volume="0.75" src="assets/sfx/impactBell_heavy_000.ogg"></audio>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const E = "power3.out";
+
+      // ── Ljudreaktiv glöd (musikens bas får strålkastarljuset och guldhalon att andas)
+      const glow = document.getElementById("bg-glow");
+      const halos = [...document.querySelectorAll(".halo")];
+      const bass = window.AUDIO_BASS || [];
+      for (let f = 0; f < bass.length; f++) {
+        tl.call(
+          ((v) => () => {
+            glow.style.opacity = String(0.55 + v * 0.4);
+            for (const h of halos) h.style.opacity = String(0.35 + v * 0.55);
+          })(bass[f]),
+          [],
+          f / 30,
+        );
+      }
+      // Svag långsam drift i planlinjerna
+      tl.fromTo("#bg-grid", { x: 0, y: 0 }, { x: -64, y: -32, duration: 31, ease: "none" }, 0);
+
+      // ── Muspekare-hjälpare
+      const cursorTo = (t, x, y, d = 0.5) => tl.to("#cursor", { x, y, duration: d, ease: "power2.inOut" }, t);
+      const click = (t, x, y) => {
+        tl.fromTo("#cursor", { scale: 1 }, { scale: 0.82, duration: 0.08, yoyo: true, repeat: 1, ease: "power1.inOut" }, t);
+        tl.set("#ripple", { x: x + 6, y: y + 6 }, t);
+        tl.fromTo("#ripple", { scale: 0.3, opacity: 0.9 }, { scale: 1.6, opacity: 0, duration: 0.5, ease: "power2.out" }, t);
+      };
+      tl.set("#cursor", { x: 1900, y: 1100, opacity: 0, transformOrigin: "10% 10%" }, 0);
+
+      // ── 1. Excel-hooken (0–3)
+      tl.fromTo("#s1-excel", { x: 380, rotation: 14, opacity: 0 }, { x: 0, rotation: -5, opacity: 1, duration: 0.6, ease: "back.out(1.4)" }, 0.08);
+      tl.fromTo("#s1-kicker", { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: E }, 0.2);
+      tl.fromTo("#s1-l1", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: E }, 0.3);
+      tl.fromTo("#s1-l2", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: E }, 0.45);
+      tl.to("#s1-excel", { x: 700, rotation: 28, opacity: 0, duration: 0.45, ease: "power3.in" }, 2.55);
+      tl.to("#s1-copy", { y: -40, opacity: 0, duration: 0.35, ease: "power2.in" }, 2.62);
+
+      // ── 2. Avslöjandet (3–6) — beat-locked: 3.02s
+      tl.fromTo("#s2-title", { scale: 1.35, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "power4.out" }, 3.02);
+      tl.fromTo("#s2-card", { y: 260, rotationX: 18, scale: 0.9, opacity: 0, transformPerspective: 1600 }, { y: 0, rotationX: 0, scale: 1, opacity: 1, duration: 0.8, ease: E }, 3.45);
+      tl.fromTo("#s2-card img", { scale: 1.06 }, { scale: 1, duration: 2.2, ease: "none" }, 3.6);
+      tl.to("#s2-title", { y: -40, opacity: 0, duration: 0.3, ease: "power2.in" }, 5.65);
+      tl.to("#s2-card", { scale: 1.12, opacity: 0, duration: 0.35, ease: "power2.in" }, 5.65);
+
+      // ── 3. Gå med (6–9.5)
+      tl.fromTo("#s3-copy", { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: E }, 6.1);
+      tl.fromTo("#s3-a", { x: 300, rotationY: -16, opacity: 0, transformPerspective: 1800 }, { x: 0, rotationY: 0, opacity: 1, duration: 0.6, ease: E }, 6.05);
+      tl.set("#cursor", { x: 1500, y: 900 }, 6.4);
+      tl.to("#cursor", { opacity: 1, duration: 0.2 }, 6.5);
+      // Hammarby-rutan: bildens (1073, 612) → skärm (1326, 547)
+      cursorTo(6.55, 1319, 543, 0.7);
+      click(7.3, 1319, 543);
+      tl.fromTo("#s3-ring", { opacity: 0, scale: 1.2 }, { opacity: 1, scale: 1, duration: 0.3, ease: E }, 7.32);
+      tl.to("#cursor", { opacity: 0, duration: 0.2 }, 7.75);
+      tl.fromTo("#s3-b", { x: 420, y: 60, rotation: 5, opacity: 0 }, { x: 0, y: 0, rotation: 0, opacity: 1, duration: 0.6, ease: E }, 7.85);
+      tl.to(["#s3-copy", "#s3-a", "#s3-b"], { opacity: 0, y: -30, duration: 0.3, ease: "power2.in", stagger: 0.03 }, 9.18);
+
+      // ── 4. Tippa (9.5–13)
+      tl.fromTo("#s4-copy", { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: E }, 9.6);
+      tl.fromTo("#s4-card", { y: 200, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: E }, 9.52);
+      tl.fromTo("#s4-zoom", { scale: 1 }, { scale: 1.06, duration: 3.2, ease: "none", transformOrigin: "0% 0%" }, 9.8);
+      tl.fromTo(["#s4-r1", "#s4-r3"], { opacity: 0 }, { opacity: 1, duration: 0.25, yoyo: true, repeat: 3, ease: "sine.inOut" }, 10.2);
+      tl.set("#cursor", { x: 1500, y: 950 }, 10.3);
+      tl.to("#cursor", { opacity: 1, duration: 0.2 }, 10.35);
+      // rad 3 (dubbletten) – bildens (740, 510) → skärm (1133, 485); vid 11.0 s är zoomen ≈1.02 → (1143, 492); pekarspetsen sitter 7/4 px in
+      cursorTo(10.4, 1136, 488, 0.55);
+      click(11.0, 1136, 488);
+      tl.to(["#s4-r1", "#s4-r3"], { opacity: 1, duration: 0.2 }, 11.3);
+      tl.to("#cursor", { opacity: 0, duration: 0.2 }, 11.9);
+      tl.to(["#s4-copy", "#s4-card"], { opacity: 0, y: -30, duration: 0.3, ease: "power2.in", stagger: 0.03 }, 12.68);
+
+      // ── 5. Allsvenskan live (13–17)
+      tl.fromTo("#s5-copy", { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: E }, 13.1);
+      tl.fromTo("#s5-chip", { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: E }, 13.6);
+      tl.fromTo("#s5-card", { x: 260, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, ease: E }, 13.02);
+      tl.fromTo("#s5-img", { scale: 1 }, { scale: 1.42, duration: 3.1, ease: "power1.inOut", transformOrigin: "78% 26%" }, 13.6);
+      tl.to(["#s5-copy", "#s5-card"], { opacity: 0, y: -30, duration: 0.3, ease: "power2.in", stagger: 0.03 }, 16.66);
+
+      // ── 6. Tipstabellen (17–20) — beat-locked: 17.02s; beat-grid: awards 17.52 / 18.02 / 18.52
+      tl.fromTo("#s6-card", { y: -120, scale: 1.08, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.45, ease: "power4.out" }, 17.02);
+      tl.fromTo("#s6-copy", { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: E }, 17.12);
+      tl.fromTo("#aw1", { y: 120, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "back.out(1.5)" }, 17.52);
+      tl.fromTo("#aw2", { y: 120, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "back.out(1.5)" }, 18.02);
+      tl.fromTo("#aw3", { y: 120, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "back.out(1.5)" }, 18.52);
+      tl.to(["#s6-copy", "#s6-card", ".awards"], { opacity: 0, y: -30, duration: 0.3, ease: "power2.in", stagger: 0.03 }, 19.66);
+
+      // ── 7. Tipskontoret (20–28) — beat-locked: 20.02s (kapitel), 23.02s (kort 2)
+      tl.fromTo("#s7-chapter", { scale: 1.3, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "power4.out" }, 20.02);
+      tl.to("#s7-chapter", { scale: 0.85, opacity: 0, duration: 0.35, ease: "power2.in" }, 21.15);
+      tl.fromTo("#s7-head", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: E }, 21.35);
+      const cards = ["#k1", "#k2", "#k3", "#k4"];
+      const items = ["#c1", "#c2", "#c3", "#c4"];
+      const starts = [21.52, 23.02, 24.52, 26.02];
+      cards.forEach((c, i) => {
+        const t = starts[i];
+        tl.fromTo(c, { x: 360, rotation: 4, opacity: 0 }, { x: 0, rotation: 0, opacity: 1, duration: 0.55, ease: E }, t);
+        tl.fromTo(items[i], { x: -30, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: E }, t + 0.05);
+        // tidigare kort glider bakåt i stapeln
+        for (let j = 0; j < i; j++) {
+          const depth = i - j;
+          tl.to(cards[j], { x: -26 * depth, y: -22 * depth, scale: 1 - 0.035 * depth, opacity: depth > 2 ? 0 : 0.55, duration: 0.5, ease: E }, t);
+        }
+        if (i > 0) tl.to(items[i - 1], { opacity: 0.7, duration: 0.3 }, t);
+      });
+      tl.set("#cursor", { x: 1600, y: 950 }, 21.6);
+      tl.to("#cursor", { opacity: 1, duration: 0.2 }, 21.62);
+      // "Hämta tabell & ligor nu": bildens (956, 368) → skärm (1263, 440)
+      cursorTo(21.7, 1256, 436, 0.5);
+      click(22.2, 1256, 436);
+      tl.fromTo("#k1-ring", { opacity: 0, scale: 1.08 }, { opacity: 1, scale: 1, duration: 0.3, ease: E }, 22.25);
+      tl.to("#cursor", { opacity: 0, duration: 0.2 }, 22.75);
+      tl.to(["#s7-head", ".checklist", "#k1", "#k2", "#k3", "#k4", "#s7-halo"], { opacity: 0, y: -30, duration: 0.35, ease: "power2.in" }, 27.62);
+
+      // ── 8. Heroes + logga (28–31) — beat-locked: 29.02s
+      tl.fromTo("#s8-card", { y: 260, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: E }, 28.02);
+      tl.fromTo("#s8-img", { y: 0 }, { y: -80, duration: 2.6, ease: "none" }, 28.2);
+      tl.to("#s8-scrim", { opacity: 1, duration: 0.45, ease: "power2.out" }, 28.95);
+      tl.fromTo("#s8-logo", { scale: 0.4, rotation: -20, opacity: 0 }, { scale: 1, rotation: 0, opacity: 1, duration: 0.55, ease: "back.out(1.7)" }, 29.02);
+      tl.fromTo("#s8-q", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: E }, 29.2);
+      tl.fromTo("#s8-word", { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: E }, 29.45);
+
+      window.__timelines["brag"] = tl;
+    </script>
+  </body>
+</html>
