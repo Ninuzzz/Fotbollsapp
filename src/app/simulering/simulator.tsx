@@ -3,28 +3,28 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
+  AlertTriangle,
   Bell,
-  ChevronDown,
-  ChevronUp,
   Dices,
   FastForward,
   FlaskConical,
-  GripVertical,
   Pause,
   PenLine,
   Play,
   RotateCcw,
   Shuffle,
   SkipForward,
+  Sparkles,
   Trophy,
   Zap,
 } from "lucide-react";
 import { botTippers, createRng, simulateSeason, type SimPlayer, type SimResult, type SimTeam, type SimTipper } from "@/lib/simulation";
 import { distributePrizes, lastPlace } from "@/lib/prizes";
 import { TeamCrest } from "@/components/team-crest";
+import { SortableRow, type Row } from "@/components/tip-row";
+import { validateTip } from "@/lib/tip-validation";
 import { Avatar } from "@/components/avatar";
 import { RankMove } from "@/components/rank-move";
 import { RankChart } from "@/components/rank-chart-lazy";
@@ -49,9 +49,11 @@ export function Simulator({ teams, players, you, economy }: { teams: SimTeam[]; 
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
 
   // ── Inställningar
-  const [order, setOrder] = useState(() => teams.map((t) => t.id));
-  const [scorerId, setScorerId] = useState<string | null>(players[0]?.id ?? null);
-  const [assistId, setAssistId] = useState<string | null>([...players].sort((a, b) => b.assistWeight - a.assistWeight)[0]?.id ?? null);
+  // Som i det riktiga tipset: 16 tomma platser där man väljer lag (eller autofyller)
+  const [rows, setRows] = useState<Row[]>(() => teams.map((_, i) => ({ key: `r${i}`, teamId: null })));
+  const order = rows.map((r) => r.teamId ?? "");
+  const [scorerId, setScorerId] = useState<string | null>(null);
+  const [assistId, setAssistId] = useState<string | null>(null);
   const [opponents, setOpponents] = useState(12);
   const [chaos, setChaos] = useState(0.35);
   const [seed, setSeed] = useState(2026);
@@ -106,7 +108,7 @@ export function Simulator({ teams, players, you, economy }: { teams: SimTeam[]; 
   if (!sim) {
     return (
       <Setup
-        {...{ teams, players, teamById, order, setOrder, scorerId, setScorerId, assistId, setAssistId, opponents, setOpponents, chaos, setChaos, seed, setSeed }}
+        {...{ teams, players, teamById, rows, setRows, scorerId, setScorerId, assistId, setAssistId, opponents, setOpponents, chaos, setChaos, seed, setSeed }}
         onStart={start}
       />
     );
@@ -389,8 +391,8 @@ function Setup(props: {
   teams: SimTeam[];
   players: SimPlayer[];
   teamById: Map<string, SimTeam>;
-  order: string[];
-  setOrder: (o: string[]) => void;
+  rows: Row[];
+  setRows: (r: Row[]) => void;
   scorerId: string | null;
   setScorerId: (v: string | null) => void;
   assistId: string | null;
@@ -403,53 +405,89 @@ function Setup(props: {
   setSeed: (v: number) => void;
   onStart: () => void;
 }) {
-  const { teams, players, teamById, order, setOrder } = props;
+  const { teams, players, teamById, rows, setRows } = props;
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  const validation = validateTip(rows.map((r) => r.teamId), teams.map((t) => t.id));
+  const dup = new Set(validation.duplicates);
+  const stamp = () => Date.now().toString(36);
+  const fill = (ids: string[]) => setRows(ids.map((teamId, i) => ({ key: `f${i}-${stamp()}`, teamId })));
   const onDragEnd = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return;
-    setOrder(arrayMove(order, order.indexOf(String(e.active.id)), order.indexOf(String(e.over.id))));
+    setRows(arrayMove(rows, rows.findIndex((r) => r.key === e.active.id), rows.findIndex((r) => r.key === e.over!.id)));
   };
-  const nudge = (i: number, d: number) => {
-    const j = i + d;
-    if (j < 0 || j >= order.length) return;
-    setOrder(arrayMove(order, i, j));
+  // Autofyll: behåller det du redan valt och fyller tomma platser med resterande lag i tabellordning
+  const autofill = () => {
+    const used = new Set(rows.map((r) => r.teamId).filter(Boolean));
+    const rest = teams.map((t) => t.id).filter((id) => !used.has(id));
+    const seen = new Set<string>();
+    setRows(
+      rows.map((r) => {
+        if (r.teamId && !seen.has(r.teamId)) {
+          seen.add(r.teamId);
+          return r;
+        }
+        return { ...r, teamId: rest.shift() ?? null };
+      }),
+    );
   };
   const shuffle = () => {
     const rng = createRng(Date.now() % 100000);
-    setOrder([...order].map((id) => ({ id, k: rng() })).sort((a, b) => a.k - b.k).map((x) => x.id));
+    fill(teams.map((t) => ({ id: t.id, k: rng() })).sort((a, b) => a.k - b.k).map((x) => x.id));
   };
   const chaosLabel = props.chaos < 0.2 ? "Favoriterna vinner" : props.chaos < 0.5 ? "Som vanligt" : props.chaos < 0.8 ? "Skrällvarning" : "Rena lotteriet";
+  const placed = 16 - validation.empty.length - validation.duplicates.length;
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
       <section aria-labelledby="sim-tip">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 id="sim-tip" className="font-display text-3xl">Ditt fejktips</h2>
           <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" onClick={() => setOrder(teams.map((t) => t.id))} className="min-h-10 px-3 text-sm">
-              Som tabellen nu
-            </Button>
-            <Button variant="ghost" onClick={() => setOrder([...order].reverse())} className="min-h-10 px-3 text-sm">
-              Vänd på allt
+            <Button variant="outline" onClick={autofill} className="min-h-10 px-3 text-sm">
+              <Sparkles className="size-4" /> Autofyll
             </Button>
             <Button variant="ghost" onClick={shuffle} className="min-h-10 px-3 text-sm">
               <Shuffle className="size-4" /> Slumpa
             </Button>
+            <Button variant="ghost" onClick={() => setRows(rows.map((r, i) => ({ key: `e${i}-${stamp()}`, teamId: null })))} className="min-h-10 px-3 text-sm">
+              <RotateCcw className="size-4" /> Rensa
+            </Button>
           </div>
         </div>
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd} id="sim-tip-dnd">
-          <SortableContext items={order} strategy={verticalListSortingStrategy}>
-            <ol className="card divide-y divide-border/60 overflow-hidden p-0">
-              {order.map((id, i) => (
-                <TipRow key={id} id={id} pos={i + 1} team={teamById.get(id)!} onUp={() => nudge(i, -1)} onDown={() => nudge(i, 1)} first={i === 0} last={i === order.length - 1} />
+
+        {!validation.ok && (
+          <div role="status" className="mb-3 flex items-start gap-2 rounded-xl border border-danger/40 bg-danger-dim/40 p-3 text-sm">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" />
+            <div>
+              {validation.duplicates.length > 0 && <p className="font-semibold text-danger">Samma lag förekommer flera gånger (rött).</p>}
+              {validation.missing.length > 0 && <p className="text-muted">Saknas: {validation.missing.map((id) => teamById.get(id)?.name).join(", ")}</p>}
+            </div>
+          </div>
+        )}
+
+        <DndContext id="sim-tip-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={rows.map((r) => r.key)} strategy={verticalListSortingStrategy}>
+            <ol className="space-y-1.5">
+              {rows.map((row, i) => (
+                <SortableRow
+                  key={row.key}
+                  row={row}
+                  index={i}
+                  teams={teams}
+                  team={row.teamId ? teamById.get(row.teamId) : undefined}
+                  duplicate={dup.has(i)}
+                  locked={false}
+                  onPick={(teamId) => setRows(rows.map((r, j) => (j === i ? { ...r, teamId } : r)))}
+                />
               ))}
             </ol>
           </SortableContext>
         </DndContext>
+        <p className="mt-3 text-xs text-muted">Välj lag i listorna, dra i handtagen, eller tryck Autofyll för att fylla de tomma platserna.</p>
       </section>
 
       <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
@@ -459,7 +497,7 @@ function Setup(props: {
           </p>
           <Field label="Skytteligavinnare (utslagsfråga 1)">
             <select className={inputClass} value={props.scorerId ?? ""} onChange={(e) => props.setScorerId(e.target.value || null)}>
-              <option value="">Ingen</option>
+              <option value="">Välj spelare…</option>
               {players.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} ({teamById.get(p.teamId)?.shortName})
@@ -469,7 +507,7 @@ function Setup(props: {
           </Field>
           <Field label="Assistkung (utslagsfråga 2)">
             <select className={inputClass} value={props.assistId ?? ""} onChange={(e) => props.setAssistId(e.target.value || null)}>
-              <option value="">Ingen</option>
+              <option value="">Välj spelare…</option>
               {players.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} ({teamById.get(p.teamId)?.shortName})
@@ -497,44 +535,15 @@ function Setup(props: {
               </Button>
             </div>
           </Field>
-          <Button variant="gold" onClick={props.onStart} className="w-full">
+          <Button variant="gold" onClick={props.onStart} disabled={!validation.ok} className="w-full">
             <Play className="size-4" /> Spela säsongen
           </Button>
+          {!validation.ok && <p className="text-center text-sm text-muted" aria-live="polite">{placed}/16 lag korrekt placerade</p>}
         </div>
         <p className="px-1 text-sm text-muted">
           Allt räknas i webbläsaren och sparas inte. Det riktiga tipset, tabellen och chatten påverkas inte.
         </p>
       </aside>
     </div>
-  );
-}
-
-function TipRow({ id, pos, team, onUp, onDown, first, last }: { id: string; pos: number; team: SimTeam; onUp: () => void; onDown: () => void; first: boolean; last: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  return (
-    <li
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`flex items-center gap-3 bg-surface px-3 py-1.5 ${isDragging ? "relative z-10 shadow-2xl ring-1 ring-gold" : ""}`}
-    >
-      <span className="font-display w-7 text-center text-xl text-muted tabular-nums">{pos}</span>
-      <button
-        type="button"
-        className="grid size-9 cursor-grab touch-none place-items-center rounded-lg text-muted hover:bg-surface-3 active:cursor-grabbing"
-        aria-label={`Flytta ${team.name}, plats ${pos}`}
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical className="size-4" />
-      </button>
-      <TeamCrest team={team} size={22} />
-      <span className="min-w-0 flex-1 truncate font-semibold">{team.name}</span>
-      <button type="button" onClick={onUp} disabled={first} className="grid size-9 cursor-pointer place-items-center rounded-lg text-muted hover:bg-surface-3 disabled:opacity-30" aria-label={`Flytta upp ${team.name}`}>
-        <ChevronUp className="size-4" />
-      </button>
-      <button type="button" onClick={onDown} disabled={last} className="grid size-9 cursor-pointer place-items-center rounded-lg text-muted hover:bg-surface-3 disabled:opacity-30" aria-label={`Flytta ner ${team.name}`}>
-        <ChevronDown className="size-4" />
-      </button>
-    </li>
   );
 }

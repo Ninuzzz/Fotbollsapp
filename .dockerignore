@@ -1,0 +1,17 @@
+# Hemligheter och lokala databaser följer aldrig med in i bilden
+.env
+.env.*
+!.env.example
+*.db
+*.db-journal
+prisma/*.db*
+
+node_modules
+.next
+.next-*
+.git
+.claude
+brag-output
+allsvenskantipset
+tsconfig.tsbuildinfo
+*.log

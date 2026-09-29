@@ -93,6 +93,10 @@ const DEMO_NAMES = [
 const AVATAR_PATTERNS = ["solid", "stripes", "hoops", "halves", "sash"];
 
 async function main() {
+  // Seeden raderar ALLT. I drift får den bara köras mot en tom databas (eller med SEED_FORCE=true).
+  if (process.env.NODE_ENV === "production" && process.env.SEED_FORCE !== "true" && (await db.user.count()) > 0) {
+    throw new Error("Databasen har redan användare. Seeden skulle radera allt, så den avbryts. (SEED_FORCE=true tvingar.)");
+  }
   console.log("Rensar databasen …");
   // Ordning spelar roll pga relationer
   await db.$transaction([
