@@ -22,6 +22,17 @@ export async function runScheduledJobs(reason = "schemalagd") {
     } catch (e) {
       log.push(`synk misslyckades: ${(e as Error).message}`);
     }
+    // Spelarfoton från API-Football en gång per dygn (16 anrop av gratisplanens 100)
+    try {
+      const { db } = await import("./db");
+      const { syncPhotosFromApiFootball } = await import("./football-api");
+      const last = (await db.setting.findUnique({ where: { key: "afPhotosAt" } }))?.value;
+      if (process.env.API_FOOTBALL_KEY && (!last || Date.now() - Date.parse(last) > 23 * HOUR)) {
+        log.push((await syncPhotosFromApiFootball(season.id)).log[0]!);
+      }
+    } catch (e) {
+      log.push(`foton misslyckades: ${(e as Error).message}`);
+    }
     try {
       log.push(`påminnelse: ${await remindMissing(season)}`);
     } catch (e) {

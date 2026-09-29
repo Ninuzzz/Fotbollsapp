@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import { apiUser } from "@/lib/auth";
 import { getActiveSeason, getSeasonTeams, recordSnapshot } from "@/lib/season";
 import { sendNotification, type Audience, type NotificationType } from "@/lib/notify";
-import { announceUpdate, syncFromApi, syncSquads, testApiFootball } from "@/lib/football-api";
+import { announceUpdate, syncFromApi, syncPhotosFromApiFootball, syncSquads, testApiFootball } from "@/lib/football-api";
 import { fillPlayerPhotos } from "@/lib/espn";
 import { oddsApiEnabled, syncOdds } from "@/lib/odds";
 import { isSafeDataImage, isSafeUrl } from "@/lib/security";
@@ -408,8 +408,10 @@ export async function runSync(what: "standings" | "squads" | "odds" | "photos" |
     }
     if (what === "test-af") return { ok: true, message: await testApiFootball(season.year, season.apiLeagueId) };
     if (what === "photos") {
+      // API-Football först (hela trupper med foto), sedan TheSportsDB för de som fortfarande saknar bild
+      const af = await syncPhotosFromApiFootball(season.id);
       const r = await fillPlayerPhotos(season.id, 40);
-      return done(`${r.found} nya foton av ${r.checked} kontrollerade spelare.`);
+      return done(`${af.log[0]} · TheSportsDB: ${r.found} nya foton av ${r.checked} kontrollerade.`);
     }
     if (what === "squads") {
       const r = await syncSquads(season.id);

@@ -168,6 +168,74 @@ export async function announceUpdate(seasonId: string, round: number, awards: Pa
 }
 
 /** Trupper, så att det finns spelare att välja som skytt/assistkung inför säsongen. */
+/**
+ * Spelarfoton från API-Football. Trupplistan (/players/squads) tar inget säsongsargument och fungerar därför
+ * på gratisplanen, med foto på varje spelare. Kostar 16 anrop (ett per lag) + högst 2 första gången för att
+ * koppla ihop lagen. Fyller bara spelare som saknar foto – manuellt inlagda bilder skrivs aldrig över.
+ */
+export async function syncPhotosFromApiFootball(seasonId: string) {
+  if (!process.env.API_FOOTBALL_KEY) return { teams: 0, found: 0, log: ["API_FOOTBALL_KEY saknas"] };
+  const { coreTeamName, isSeniorMenTeam, matchPlayerName } = await import("./name-match");
+  const teams = await getSeasonTeams(seasonId);
+  const log: string[] = [];
+
+  // 1. Koppla våra lag till API-Footballs lag-id (en gång – sparas på laget)
+  const unlinked = teams.filter((t) => !t.apiTeamId);
+  if (unlinked.length) {
+    const pool: { id: number; name: string }[] = [];
+    // Allsvenskan + Superettan 2024 (tillgängliga på gratisplanen) täcker lagen i årets serie
+    for (const league of [113, 114]) {
+      try {
+        const r = await af<{ team: { id: number; name: string } }[]>(`/teams?league=${league}&season=2024`);
+        pool.push(...r.map((x) => x.team));
+      } catch (e) {
+        log.push(`lagsökning liga ${league}: ${(e as Error).message}`);
+      }
+    }
+    for (const t of unlinked) {
+      const ours = coreTeamName(t.name);
+      const senior = pool.filter((p) => isSeniorMenTeam(p.name));
+      // Exakt kärnnamn först, annars att det ena börjar med det andra ("AIK" ↔ "AIK Stockholm")
+      let hit = senior.filter((p) => coreTeamName(p.name) === ours);
+      if (!hit.length) hit = senior.filter((p) => coreTeamName(p.name).startsWith(`${ours} `) || ours.startsWith(`${coreTeamName(p.name)} `));
+      if (hit.length === 1) {
+        await db.team.update({ where: { id: t.id }, data: { apiTeamId: hit[0]!.id } });
+        t.apiTeamId = hit[0]!.id;
+      } else log.push(`hittade inte ${t.name} hos API-Football`);
+    }
+  }
+
+  // 2. Trupplistor med foton → spelare som saknar bild
+  let found = 0;
+  let linked = 0;
+  const linkedTeams = teams.filter((x) => x.apiTeamId);
+  for (const [i, t] of linkedTeams.entries()) {
+    // Gratisplanen tillåter ~10 anrop per minut – annars svarar API:et 429 för resten av lagen
+    if (i > 0) await new Promise((r) => setTimeout(r, 7_000));
+    try {
+      const r = await af<{ players: { id: number; name: string; photo: string | null }[] }[]>(`/players/squads?team=${t.apiTeamId}`);
+      const ours = await db.player.findMany({ where: { seasonId, teamId: t.id } });
+      for (const p of r[0]?.players ?? []) {
+        const me = matchPlayerName(p.name, ours);
+        if (!me) continue;
+        linked++;
+        const data: { apiPlayerId?: number; photoUrl?: string } = {};
+        if (!me.apiPlayerId) data.apiPlayerId = p.id;
+        if (!me.photoUrl && p.photo?.startsWith("https://")) {
+          data.photoUrl = p.photo;
+          found++;
+        }
+        if (Object.keys(data).length) await db.player.update({ where: { id: me.id }, data });
+      }
+    } catch (e) {
+      log.push(`${t.name}: ${(e as Error).message}`);
+    }
+  }
+  log.unshift(`API-Football: ${found} nya foton (${linked} spelare matchade i ${linkedTeams.length} lag)`);
+  await db.setting.upsert({ where: { key: "afPhotosAt" }, create: { key: "afPhotosAt", value: new Date().toISOString() }, update: { value: new Date().toISOString() } });
+  return { teams: teams.length, found, log };
+}
+
 export async function syncSquads(seasonId: string) {
   const teams = await getSeasonTeams(seasonId);
   if (!teams.some((t) => t.espnId)) {
