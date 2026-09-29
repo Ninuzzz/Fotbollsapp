@@ -7,6 +7,9 @@ import { NextResponse, type NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
   const dev = process.env.NODE_ENV !== "production";
+  // https-uppgradering bara när sidan faktiskt nåddes över https (i drift sätter proxyn x-forwarded-proto).
+  // Annars ber vi en mobil på http://192.168… att hämta CSS/JS över https, som inte finns – och sidan blir oformaterad.
+  const https = req.nextUrl.protocol === "https:" || req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() === "https";
   const csp = [
     `default-src 'self'`,
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
@@ -21,7 +24,7 @@ export function middleware(req: NextRequest) {
     `form-action 'self'`,
     `base-uri 'self'`,
     `object-src 'none'`,
-    ...(dev ? [] : ["upgrade-insecure-requests"]),
+    ...(!dev && https ? ["upgrade-insecure-requests"] : []),
   ].join("; ");
 
   const requestHeaders = new Headers(req.headers);
@@ -35,7 +38,7 @@ export function middleware(req: NextRequest) {
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
   res.headers.set("Cross-Origin-Opener-Policy", "same-origin");
-  if (!dev) res.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
+  if (!dev && https) res.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
   return res;
 }
 

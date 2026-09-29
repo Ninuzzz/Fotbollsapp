@@ -18,12 +18,17 @@ export function Button({ variant = "primary", className = "", ...props }: Compon
   return <button className={`${base} ${variants[variant]} ${className}`} {...props} />;
 }
 
+/**
+ * Knapplänkar förhämtar hela sidan (inte bara laddningsvyn) när de syns, så att första klicket känns lika
+ * snabbt som ett återbesök. Våra sidor ändrar inget när de hämtas, så förhämtning är ofarlig.
+ */
 export function ButtonLink({
   variant = "primary",
   className = "",
+  prefetch = true,
   ...props
 }: ComponentProps<typeof Link> & { variant?: Variant }) {
-  return <Link className={`${base} ${variants[variant]} ${className}`} {...props} />;
+  return <Link prefetch={prefetch} className={`${base} ${variants[variant]} ${className}`} {...props} />;
 }
 
 export function Card({ className = "", children, ...props }: ComponentProps<"div">) {

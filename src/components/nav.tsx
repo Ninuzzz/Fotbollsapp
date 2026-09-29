@@ -69,6 +69,7 @@ export function Nav({ user, unread }: { user: NavUser; unread: number }) {
               <Link
                 key={i.href}
                 href={i.href}
+                prefetch
                 aria-current={active(i.href) ? "page" : undefined}
                 className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
                   active(i.href) ? "bg-surface-3 text-text" : "text-muted hover:text-text"
@@ -163,6 +164,7 @@ export function Nav({ user, unread }: { user: NavUser; unread: number }) {
               <Link
                 key={i.href}
                 href={i.href}
+                prefetch
                 aria-current={active(i.href) ? "page" : undefined}
                 className={`flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-semibold ${
                   active(i.href) ? "text-gold" : "text-muted"
@@ -209,6 +211,7 @@ export function Nav({ user, unread }: { user: NavUser; unread: number }) {
               <Link
                 key={i.href}
                 href={i.href}
+                prefetch
                 className={`flex min-h-12 items-center gap-3 rounded-xl px-3 font-semibold ${
                   active(i.href) ? "bg-surface-3 text-gold" : "text-text hover:bg-surface-3"
                 }`}
