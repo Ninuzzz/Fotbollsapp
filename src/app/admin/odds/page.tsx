@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/auth";
 import { getActiveSeason, getSeasonTeams } from "@/lib/season";
 import { getOddsBoard, oddsApiEnabled } from "@/lib/odds";
 import { runSync } from "@/app/actions/admin";
@@ -5,6 +6,8 @@ import { ActionButton } from "../ui";
 import { OddsEditor } from "./odds-editor";
 
 export default async function OddsAdmin() {
+  // Skyddet i layouten räcker inte: sidor kan renderas utan layouten (RSC-förfrågningar)
+  await requireAdmin();
   const season = await getActiveSeason();
   if (!season) return null;
   const [board, teams] = await Promise.all([getOddsBoard(season.id), getSeasonTeams(season.id)]);

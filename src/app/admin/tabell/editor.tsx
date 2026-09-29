@@ -47,7 +47,7 @@ export function StandingsEditor({ teams, initial }: { teams: { id: string; name:
           Sortera på poäng/målskillnad
         </Button>
       </div>
-      <div className="overflow-x-auto rounded-2xl border border-border">
+      <div className="relative overflow-x-auto rounded-2xl border border-border">
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-surface-2 text-xs uppercase text-muted">
             <tr>

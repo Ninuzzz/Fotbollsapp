@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/auth";
 import Link from "next/link";
 import { MoreHorizontal } from "lucide-react";
 import { db } from "@/lib/db";
@@ -11,6 +12,8 @@ import { ActionButton } from "../ui";
 const FILTERS = { all: "Alla", claimed: "Väntar på bekräftelse", unpaid: "Obetalda", missing: "Saknar tips" } as const;
 
 export default async function EntriesAdmin({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
+  // Skyddet i layouten räcker inte: sidor kan renderas utan layouten (RSC-förfrågningar)
+  await requireAdmin();
   const season = await getActiveSeason();
   if (!season) return null;
   const { filter = "all" } = await searchParams;
@@ -40,7 +43,7 @@ export default async function EntriesAdmin({ searchParams }: { searchParams: Pro
           </Link>
         ))}
       </div>
-      <div className="overflow-x-auto rounded-2xl border border-border">
+      <div className="relative overflow-x-auto rounded-2xl border border-border">
         <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-surface-2 text-xs uppercase tracking-wider text-muted">
             <tr>

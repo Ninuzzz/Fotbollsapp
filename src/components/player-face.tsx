@@ -1,4 +1,5 @@
 import { onColor } from "@/lib/avatar";
+import { sizedImage } from "@/lib/image-url";
 
 /** Spelarfoto från API, annars initialer i lagets färger */
 export function PlayerFace({
@@ -18,11 +19,12 @@ export function PlayerFace({
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={photoUrl}
+        src={sizedImage(photoUrl, size)}
         alt={name}
         width={size}
         height={size}
         loading="lazy"
+        decoding="async"
         className={`shrink-0 rounded-full bg-surface-3 object-cover object-top ${className}`}
         style={{ width: size, height: size }}
       />

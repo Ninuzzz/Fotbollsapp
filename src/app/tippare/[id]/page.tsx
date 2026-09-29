@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { computeLeaderboard, getActiveSeason, seasonPhase } from "@/lib/season";
+import { getActiveSeason, getLeaderboard, seasonPhase } from "@/lib/season";
 import { requireUser } from "@/lib/auth";
+import { isMember } from "@/lib/chat-access";
 import { Avatar } from "@/components/avatar";
 import { TeamCrest } from "@/components/team-crest";
 import { Badge, ButtonLink } from "@/components/ui";
@@ -14,12 +15,13 @@ export default async function TipsterPage({ params }: { params: Promise<{ id: st
   if (!season) notFound();
   // Enskilda tips visas bara för inloggade deltagare
   const viewer = await requireUser();
+  if (!(await isMember(viewer))) notFound();
   const entry = await db.entry.findFirst({ where: { id, seasonId: season.id } });
   if (!entry) notFound();
   // Tips är hemliga före deadline – bara ägaren och admin kan se dem
   if (seasonPhase(season) === "TIPPING" && viewer?.id !== entry.userId && viewer?.role !== "ADMIN") notFound();
 
-  const { ranked, snapshot } = await computeLeaderboard(season.id);
+  const { ranked, snapshot } = await getLeaderboard(season.id);
   const r = ranked.find((x) => x.id === id);
   if (!r || !snapshot) notFound();
   const teamById = new Map(snapshot.rows.map((row) => [row.teamId, row.team]));

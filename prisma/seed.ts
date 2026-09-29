@@ -7,9 +7,11 @@
  * Inloggningar (endast lokal utveckling):
  *   Admin:  anders@allsvenskantipset.se / SEED_ADMIN_PASSWORD (default "anders2026")
  *   Demo:   demo@allsvenskantipset.se   / "tipset2026"
+ * I drift (NODE_ENV=production) krävs SEED_ADMIN_PASSWORD, och demokontona får slumpade lösenord.
  */
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { TEAMS_2026, TEAMS_EARLIER } from "../src/lib/teams-data";
@@ -148,8 +150,12 @@ async function main() {
   }
 
   console.log("Användare …");
-  const adminHash = await bcrypt.hash(process.env.SEED_ADMIN_PASSWORD ?? "anders2026", 11);
-  const demoHash = await bcrypt.hash("tipset2026", 11);
+  // I drift får inga kända standardlösenord finnas: adminlösenordet måste anges, demokontona får slumpade lösenord
+  const prod = process.env.NODE_ENV === "production";
+  const adminPw = process.env.SEED_ADMIN_PASSWORD ?? (prod ? "" : "anders2026");
+  if (prod && adminPw.length < 12) throw new Error("Sätt SEED_ADMIN_PASSWORD (minst 12 tecken) innan du seedar i drift.");
+  const adminHash = await bcrypt.hash(adminPw, 11);
+  const demoHash = await bcrypt.hash(prod ? randomBytes(24).toString("base64url") : "tipset2026", 11);
   const admin = await db.user.create({
     data: { email: "anders@allsvenskantipset.se", name: "Anders", role: "ADMIN", passwordHash: adminHash, favoriteTeamId: T("Malmö FF"), avatar: "jersey:stripes:#38bdf8:#ffffff:1" },
   });

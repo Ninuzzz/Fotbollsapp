@@ -26,7 +26,12 @@ export function rateLimit(key: string, limit: number, windowMs: number): { ok: b
 
 export async function clientIp() {
   const h = await headers();
-  return h.get("fly-client-ip") ?? h.get("x-real-ip") ?? h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  // Klienten kan själv skicka vilka IP-huvuden som helst. Lita bara på huvudet som den egna proxyn sätter
+  // (TRUSTED_IP_HEADER, t.ex. "fly-client-ip" på Fly.io), annars på det SISTA ledet i X-Forwarded-For,
+  // som läggs till av närmaste proxy och inte kan förfalskas av klienten.
+  const trusted = process.env.TRUSTED_IP_HEADER?.toLowerCase();
+  if (trusted) return h.get(trusted)?.split(",")[0]?.trim() || "unknown";
+  return h.get("x-forwarded-for")?.split(",").at(-1)?.trim() || "unknown";
 }
 
 /**

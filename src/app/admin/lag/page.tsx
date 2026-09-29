@@ -1,8 +1,11 @@
+import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getActiveSeason } from "@/lib/season";
 import { TeamsEditor } from "./teams-editor";
 
 export default async function TeamsAdmin() {
+  // Skyddet i layouten räcker inte: sidor kan renderas utan layouten (RSC-förfrågningar)
+  await requireAdmin();
   const season = await getActiveSeason();
   const [teams, inSeason] = await Promise.all([
     db.team.findMany({ orderBy: { name: "asc" } }),

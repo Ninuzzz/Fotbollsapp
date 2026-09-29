@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Coffee, Crown, Gift, ListOrdered, Smartphone, Target, Trophy } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { computeLeaderboard, computePrizes, getActiveSeason, latestAwards, seasonPhase } from "@/lib/season";
+import { computePrizes, getActiveSeason, getLeaderboard, latestAwards, seasonPhase } from "@/lib/season";
 import { ButtonLink, Badge } from "@/components/ui";
 import { CountUp, Parallax, Reveal, RollingBall, Stagger, Ball } from "@/components/motion";
 import { LeagueTable } from "@/components/league-table";
@@ -14,6 +14,7 @@ import { Countdown } from "@/components/countdown";
 import { fmtDate, kr } from "@/lib/format";
 import { parseSplit } from "@/lib/prizes";
 import { publicUser } from "@/lib/privacy";
+import { isMember } from "@/lib/chat-access";
 
 export const dynamic = "force-dynamic";
 
@@ -22,13 +23,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
   const [user, season] = await Promise.all([getCurrentUser(), getActiveSeason()]);
   if (!season) return <div className="p-10">Ingen säsong skapad ännu. Logga in som admin.</div>;
   const [{ ranked: rankedRaw, snapshot }, awardsRaw, prizes, heroes] = await Promise.all([
-    computeLeaderboard(season.id),
+    getLeaderboard(season.id),
     latestAwards(season.id),
     computePrizes(season.id),
     // GDPR: bara vinnare som gett samtycke visas publikt
     db.hallOfFame.findMany({ where: { consent: true }, orderBy: { year: "desc" } }),
   ]);
-  const loggedIn = Boolean(user);
+  const loggedIn = await isMember(user);
   const ranked = rankedRaw.map((r) => ({ ...r, user: publicUser(r.user, loggedIn) }));
   const awards = awardsRaw.map((a) => ({ ...a, user: a.user ? publicUser(a.user, loggedIn) : null }));
   const phase = seasonPhase(season);
@@ -52,24 +53,24 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
         <div className="absolute left-1/2 top-0 -z-10 h-full w-px bg-pitch/10" aria-hidden />
         <div className="mx-auto grid grid-cols-1 max-w-7xl items-center gap-10 px-4 pb-16 pt-12 md:px-6 md:pb-28 md:pt-20 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
           <div>
-            <Reveal>
+            <Reveal intro>
               <Badge tone="gold" className="mb-5">
                 <Trophy className="size-3.5" /> {season.name} · säsong {season.year - 2014}
               </Badge>
             </Reveal>
-            <Reveal delay={0.05}>
+            <Reveal intro delay={0.05}>
               <h1 className="font-display text-[clamp(4rem,13vw,10rem)]">
                 Allsvenskan
                 <br />
                 <span className="shimmer">tipset</span>
               </h1>
             </Reveal>
-            <Reveal delay={0.12}>
+            <Reveal intro delay={0.12}>
               <p className="mt-5 max-w-xl text-lg text-muted md:text-xl">
                 Tippa sluttabellen, 1 till 16. Minst antal fel vinner pengarna, muggen och ett år av ovärderlig rätt att skryta.
               </p>
             </Reveal>
-            <Reveal delay={0.18}>
+            <Reveal intro delay={0.18}>
               <div className="mt-8 flex flex-wrap gap-3">
                 {user ? (
                   <>
@@ -93,7 +94,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
               </div>
             </Reveal>
             {phase === "TIPPING" && (
-              <Reveal delay={0.24}>
+              <Reveal intro delay={0.24}>
                 <div className="mt-8">
                   <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-muted">Sista dag att tippa: {fmtDate(season.editDeadline)}</p>
                   <Countdown to={season.editDeadline.toISOString()} />
@@ -103,7 +104,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
           </div>
 
           {/* Personligt kort eller topp 3 */}
-          <Reveal delay={0.2} y={40}>
+          <Reveal intro delay={0.2} y={40}>
             <div className="relative">
               <div className="absolute -right-4 -top-10 hidden animate-[float-y_5s_ease-in-out_infinite] md:block" aria-hidden>
                 <Ball size={84} />
@@ -322,7 +323,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
             </div>
           </Reveal>
         </div>
-        <div className="no-scrollbar mt-10 flex snap-x snap-mandatory gap-5 overflow-x-auto px-4 pb-4 md:px-[max(1.5rem,calc((100vw-80rem)/2+1.5rem))]">
+        <div className="no-scrollbar mt-10 flex snap-x snap-mandatory gap-5 relative overflow-x-auto px-4 pb-4 md:px-[max(1.5rem,calc((100vw-80rem)/2+1.5rem))]">
           {heroes.map((h, i) => (
             <Reveal key={h.id} delay={Math.min(i * 0.06, 0.5)} className="shrink-0 snap-start">
               <Link href="/heroes" className="group block w-56 md:w-64">

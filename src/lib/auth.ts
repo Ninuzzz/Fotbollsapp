@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createHash, randomBytes } from "node:crypto";
@@ -39,9 +40,16 @@ export async function destroySession() {
   jar.delete(COOKIE);
 }
 
+/** Id (hash) för den aktuella sessionen, t.ex. för att behålla den när andra sessioner loggas ut. */
+export async function currentSessionId() {
+  const token = (await cookies()).get(COOKIE)?.value;
+  return token ? hashToken(token) : null;
+}
+
 export type CurrentUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
 
-export async function getCurrentUser() {
+/** Cachas per förfrågan – layout, sida och hjälpfunktioner frågar alla efter inloggad användare. */
+export const getCurrentUser = cache(async () => {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;
@@ -53,7 +61,7 @@ export async function getCurrentUser() {
   const { passwordHash: _omit, ...user } = session.user;
   void _omit;
   return user;
-}
+});
 
 export async function requireUser() {
   const user = await getCurrentUser();

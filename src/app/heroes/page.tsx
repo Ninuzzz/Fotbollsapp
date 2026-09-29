@@ -1,9 +1,10 @@
 import { Award, Crown, Medal, TrendingDown, Trophy, Users } from "lucide-react";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
+import { isMember } from "@/lib/chat-access";
 import { PageHeader, SectionTitle, Stat } from "@/components/ui";
 import { Reveal } from "@/components/motion";
-import { RankChart } from "@/components/charts";
+import { RankChart } from "@/components/rank-chart-lazy";
 
 export const metadata = { title: "Heroes – Hall of Fame" };
 
@@ -13,7 +14,8 @@ export const dynamic = "force-dynamic";
 
 export default async function HeroesPage() {
   const viewer = await getCurrentUser();
-  const loggedIn = Boolean(viewer);
+  // Historiken med namn är för bekräftade deltagare, inte för vem som helst med ett konto
+  const loggedIn = await isMember(viewer);
   const isAdmin = viewer?.role === "ADMIN";
   const [allHeroes, allHistory] = await Promise.all([
     db.hallOfFame.findMany({ orderBy: { year: "desc" } }),
@@ -148,7 +150,7 @@ export default async function HeroesPage() {
           <p className="-mt-2 mb-4 text-muted">
             Total Score = summan av alla fel över åren. Sorterat på snitt per säsong, så att alla jämförs rättvist oavsett antal år.
           </p>
-          <div className="overflow-x-auto rounded-2xl border border-border">
+          <div className="relative overflow-x-auto rounded-2xl border border-border">
             <table className="w-full min-w-[560px] text-sm">
               <thead className="bg-surface-2 text-xs uppercase tracking-wider text-muted">
                 <tr>

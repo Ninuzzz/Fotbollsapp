@@ -1,4 +1,5 @@
 import { onColor } from "@/lib/avatar";
+import { sizedImage } from "@/lib/image-url";
 
 type CrestTeam = { name: string; shortName: string; logoUrl?: string | null; primaryColor: string; secondaryColor: string };
 
@@ -10,11 +11,12 @@ export function TeamCrest({ team, size = 28, className = "" }: { team: CrestTeam
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={team.logoUrl}
+        src={sizedImage(team.logoUrl, size)}
         alt={`${team.name} logotyp`}
         width={size}
         height={size}
         loading="lazy"
+        decoding="async"
         className={`shrink-0 object-contain ${className}`}
         style={{ width: size, height: size }}
       />

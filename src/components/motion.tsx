@@ -1,32 +1,67 @@
 "use client";
 
 import { motion, useInView, useMotionValue, useSpring, useTransform, useScroll, useReducedMotion, MotionConfig } from "motion/react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 /** Respektera prefers-reduced-motion i hela appen */
 export function MotionProvider({ children }: { children: ReactNode }) {
   return <MotionConfig reducedMotion="user">{children}</MotionConfig>;
 }
 
-/** Glider in när elementet scrollas in i bild */
+const EASE = [0.22, 1, 0.36, 1] as const;
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+/**
+ * Glider in när elementet scrollas in i bild.
+ *
+ * Snabbt först: innehållet renderas SYNLIGT från servern. Bara det som ligger under skärmkanten när sidan laddas
+ * göms (innan första bildrutan, i en layout-effekt) och animeras sedan in vid scroll. Innehåll som syns direkt
+ * behöver alltså aldrig vänta på JavaScript.
+ * `intro` = animera in direkt vid sidladdning med ren CSS (startsidans hero), också utan att vänta på JavaScript.
+ */
 export function Reveal({
   children,
   delay = 0,
   y = 28,
+  x = 0,
+  duration = 0.6,
+  margin = "-60px",
+  intro = false,
   className = "",
 }: {
   children: ReactNode;
   delay?: number;
   y?: number;
+  x?: number;
+  duration?: number;
+  margin?: `${number}px`;
+  intro?: boolean;
   className?: string;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [armed, setArmed] = useState(false);
+  const inView = useInView(ref, { once: true, margin });
+  useIsoLayoutEffect(() => {
+    if (intro || !ref.current) return;
+    if (ref.current.getBoundingClientRect().top > window.innerHeight) setArmed(true);
+  }, [intro]);
+
+  if (intro)
+    return (
+      <div className={`reveal-intro ${className}`} style={{ "--reveal-delay": `${delay}s`, "--reveal-y": `${y}px` } as React.CSSProperties}>
+        {children}
+      </div>
+    );
   return (
     <motion.div
+      ref={ref}
       className={className}
-      initial={{ opacity: 0, y }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
+      initial={false}
+      animate={armed && !inView ? "hidden" : "shown"}
+      variants={{
+        hidden: { opacity: 0, x, y, transition: { duration: 0 } },
+        shown: { opacity: 1, x: 0, y: 0, transition: { duration, delay, ease: EASE } },
+      }}
     >
       {children}
     </motion.div>
@@ -38,15 +73,9 @@ export function Stagger({ children, className = "", step = 0.05 }: { children: R
   return (
     <div className={className}>
       {children.map((c, i) => (
-        <motion.div
-          key={i}
-          initial={{ opacity: 0, x: -16 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true, margin: "-40px" }}
-          transition={{ duration: 0.45, delay: Math.min(i * step, 0.8), ease: "easeOut" }}
-        >
+        <Reveal key={i} x={-16} y={0} duration={0.45} margin="-40px" delay={Math.min(i * step, 0.8)}>
           {c}
-        </motion.div>
+        </Reveal>
       ))}
     </div>
   );

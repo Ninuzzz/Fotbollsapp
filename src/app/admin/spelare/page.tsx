@@ -1,8 +1,11 @@
+import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getActiveSeason, getSeasonTeams } from "@/lib/season";
 import { PlayersEditor } from "./players-editor";
 
 export default async function PlayersAdmin() {
+  // Skyddet i layouten räcker inte: sidor kan renderas utan layouten (RSC-förfrågningar)
+  await requireAdmin();
   const season = await getActiveSeason();
   if (!season) return null;
   const [players, teams, tipCounts] = await Promise.all([

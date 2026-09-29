@@ -108,6 +108,6 @@ För större drift: byt `provider` till `postgresql` i `prisma/schema.prisma` oc
 
 ## Att kontrollera
 
-- **Hall of Fame-bilderna 2024 och 2025** (`public/heroes/2024.png` och `2025.png`) är mappade till Ulf Carlsson och Johan Åhlander i den ordning bilderna kom. Byt i Admin → Heroes om det är fel.
+- **Hall of Fame-bilderna 2024 och 2025** (`private/heroes/2024.png` och `2025.png`, serveras bara vid samtycke) är mappade till Ulf Carlsson och Johan Åhlander i den ordning bilderna kom. Byt i Admin → Heroes om det är fel.
 - 2024 års data (33 tippare, placering per omgång) är importerad från `Allsvenskantips 2025.xlsx` (flikarna omg1–30). Äldre år kan klistras in i Admin → Heroes.
 - Demotippare, tabellhistorik före omgång 22, chatt och odds är exempeldata. Tabellen efter omgång 22 samt skytte- och assistligan är riktiga (ESPN).

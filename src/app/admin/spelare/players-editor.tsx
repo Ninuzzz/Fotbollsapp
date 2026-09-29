@@ -127,7 +127,7 @@ export function PlayersEditor({ players, teams }: { players: P[]; teams: { id: s
       </Card>
 
       <input className={smallInput} placeholder="Sök spelare eller lag…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Sök spelare" />
-      <div className="overflow-x-auto rounded-2xl border border-border">
+      <div className="relative overflow-x-auto rounded-2xl border border-border">
         <table className="w-full min-w-[600px] text-sm">
           <thead className="bg-surface-2 text-xs uppercase text-muted">
             <tr>

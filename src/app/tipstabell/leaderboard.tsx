@@ -6,7 +6,7 @@ import { motion } from "motion/react";
 import { Coins, Gift, Star, Users } from "lucide-react";
 import { Avatar } from "@/components/avatar";
 import { RankMove } from "@/components/rank-move";
-import { RankChart } from "@/components/charts";
+import { RankChart } from "@/components/rank-chart-lazy";
 import { toggleFollow } from "@/app/actions/social";
 
 type Entry = {
@@ -110,15 +110,15 @@ export function Leaderboard({
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-border">
-        <table className="w-full min-w-[640px] text-sm">
+      <div className="relative overflow-x-auto rounded-2xl border border-border">
+        <table className="w-full text-sm sm:min-w-[640px]">
           <thead className="bg-surface-2 text-xs uppercase tracking-wider text-muted">
             <tr>
               <th className="px-3 py-3 text-left" scope="col">#</th>
               <th className="px-1 py-3" scope="col"><span className="sr-only">Förändring</span></th>
               <th className="px-2 py-3 text-left" scope="col">Tippare</th>
               <th className="px-2 py-3 text-right" scope="col">Fel</th>
-              <th className="px-2 py-3 text-right" scope="col">Exakta</th>
+              <th className="hidden px-2 py-3 text-right sm:table-cell" scope="col">Exakta</th>
               <th className="hidden px-2 py-3 text-left md:table-cell" scope="col">Skytt (mål)</th>
               <th className="hidden px-2 py-3 text-left lg:table-cell" scope="col">Assist</th>
               <th className="px-2 py-3 text-right" scope="col">Pris</th>
@@ -136,7 +136,7 @@ export function Leaderboard({
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: Math.min(i * 0.015, 0.4) }}
-                  className={`border-t border-border/70 ${isMe ? "bg-team/15" : e.rank <= 3 ? "bg-gold-dim/15" : "odd:bg-surface/40"}`}
+                  className={`border-t border-border/60 ${isMe ? "bg-team/15" : ""}`}
                 >
                   <td className={`px-3 py-2.5 font-display text-2xl tabular-nums ${e.rank <= 3 ? "text-gold" : "text-muted"}`}>{e.rank}</td>
                   <td className="w-10 px-1 py-2.5 text-center">
@@ -144,7 +144,7 @@ export function Leaderboard({
                   </td>
                   <td className="px-2 py-2.5">
                     <div className="flex items-center gap-3">
-                      <Avatar value={e.avatar} name={e.name} size={34} />
+                      <Avatar value={e.avatar} name={e.name} size={34} className="hidden min-[400px]:block" />
                       <div className="min-w-0">
                         {tipsVisible ? (
                           <Link href={`/tippare/${e.id}`} className="font-semibold hover:text-gold hover:underline">
@@ -154,18 +154,22 @@ export function Leaderboard({
                           <span className="font-semibold">{e.name}</span>
                         )}
                         {isMe && <span className="ml-2 text-xs font-bold text-team">DU</span>}
-                        {e.decidedBy && DECIDED[e.decidedBy] && <p className="text-xs text-faint">{DECIDED[e.decidedBy]}</p>}
+                        {e.decidedBy && DECIDED[e.decidedBy] && (
+                          <span className="ml-1.5 cursor-help text-xs text-muted" title={DECIDED[e.decidedBy]}>
+                            *<span className="sr-only">{DECIDED[e.decidedBy]}</span>
+                          </span>
+                        )}
                       </div>
                     </div>
                   </td>
                   <td className="px-2 py-2.5 text-right font-display text-2xl text-danger tabular-nums">{e.errors}</td>
-                  <td className="px-2 py-2.5 text-right tabular-nums text-pitch">{e.exact}</td>
+                  <td className="hidden px-2 py-2.5 text-right tabular-nums text-pitch sm:table-cell">{e.exact}</td>
                   <td className="hidden px-2 py-2.5 text-muted md:table-cell">{e.scorer}</td>
                   <td className="hidden px-2 py-2.5 text-muted lg:table-cell">{e.assist}</td>
                   <td className="px-2 py-2.5 text-right">
                     {e.payout > 0 ? (
-                      <span className="inline-flex items-center gap-1 font-semibold text-gold">
-                        <Coins className="size-3.5" />
+                      <span className="inline-flex items-center gap-1 whitespace-nowrap font-semibold text-gold">
+                        <Coins className="hidden size-3.5 sm:block" />
                         {e.payout} kr
                       </span>
                     ) : e.last ? (
@@ -194,14 +198,17 @@ export function Leaderboard({
           </tbody>
         </table>
       </div>
-      {!tipsVisible && <p className="mt-2 text-xs text-muted">Allas tips blir synliga efter deadline, så att ingen kan kopiera.</p>}
+      <p className="mt-2 text-xs text-muted">
+        * Lika antal fel: placeringen avgjordes på skytteligan, assistligan eller antal exakta placeringar.
+        {!tipsVisible && " Allas tips blir synliga efter deadline, så att ingen kan kopiera."}
+      </p>
 
       <section className="mt-14" id="trender">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="font-display text-4xl">Trender</h2>
             <p className="text-sm text-muted">
-              {optimisticFollowing.length ? "Du och ditt gäng" : "Du och topp 5"}, omgång för omgång.
+              {optimisticFollowing.length ? "Du och ditt gäng" : me ? "Du och topp 5" : "Topp 5"}, omgång för omgång.
             </p>
           </div>
           <div className="flex rounded-xl border border-border p-1" role="group" aria-label="Mått">

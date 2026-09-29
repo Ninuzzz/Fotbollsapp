@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { pushEnabled } from "@/lib/notify";
 import { fmtDateTime } from "@/lib/format";
@@ -7,6 +8,8 @@ import { ActionButton } from "../ui";
 import { Composer } from "./composer";
 
 export default async function BroadcastAdmin() {
+  // Skyddet i layouten räcker inte: sidor kan renderas utan layouten (RSC-förfrågningar)
+  await requireAdmin();
   const [items, subs] = await Promise.all([
     db.notification.findMany({ orderBy: { createdAt: "desc" }, take: 50, include: { _count: { select: { reads: true } } } }),
     db.pushSubscription.count(),

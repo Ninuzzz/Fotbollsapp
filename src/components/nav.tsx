@@ -7,6 +7,7 @@ import {
   Bell,
   BookOpen,
   Crown,
+  FlaskConical,
   Home,
   ListOrdered,
   LogOut,
@@ -24,6 +25,7 @@ import {
 import { Avatar } from "./avatar";
 import { Logo } from "./logo";
 import { logout } from "@/app/actions/auth";
+import { ADMIN_LINKS } from "./admin-links";
 
 type NavUser = { name: string; avatar: string; role: string } | null;
 
@@ -75,6 +77,15 @@ export function Nav({ user, unread }: { user: NavUser; unread: number }) {
                 {i.label}
               </Link>
             ))}
+            {user?.role === "ADMIN" && (
+              <Link
+                href="/admin"
+                aria-current={active("/admin") ? "page" : undefined}
+                className={`rounded-lg px-3 py-2 text-sm font-semibold text-gold transition hover:brightness-110 ${active("/admin") ? "bg-surface-3" : ""}`}
+              >
+                Admin
+              </Link>
+            )}
           </nav>
           <div className="ml-auto flex items-center gap-1.5">
             {user ? (
@@ -97,7 +108,7 @@ export function Nav({ user, unread }: { user: NavUser; unread: number }) {
                 </Link>
                 <button
                   onClick={() => setOpen(true)}
-                  className="grid size-11 cursor-pointer place-items-center rounded-xl text-muted hover:bg-surface-3 hover:text-text lg:hidden"
+                  className="grid size-11 cursor-pointer place-items-center rounded-xl text-muted hover:bg-surface-3 hover:text-text"
                   aria-label="Öppna meny"
                   aria-haspopup="dialog"
                   aria-controls="mobilmeny"
@@ -121,7 +132,7 @@ export function Nav({ user, unread }: { user: NavUser; unread: number }) {
                 </Link>
                 <button
                   onClick={() => setOpen(true)}
-                  className="grid size-11 cursor-pointer place-items-center rounded-xl text-muted hover:bg-surface-3 lg:hidden"
+                  className="grid size-11 cursor-pointer place-items-center rounded-xl text-muted hover:bg-surface-3 hover:text-text"
                   aria-label="Öppna meny"
                   aria-haspopup="dialog"
                   aria-controls="mobilmeny"
@@ -172,7 +183,7 @@ export function Nav({ user, unread }: { user: NavUser; unread: number }) {
         aria-label="Meny"
         onClose={() => setOpen(false)}
         onClick={(e) => e.target === e.currentTarget && setOpen(false)}
-        className="m-0 ml-auto h-dvh max-h-none w-[min(22rem,88vw)] max-w-none border-0 bg-transparent p-0 text-text backdrop:bg-black/60 backdrop:backdrop-blur-sm lg:hidden"
+        className="m-0 ml-auto h-dvh max-h-none w-[min(22rem,88vw)] max-w-none border-0 bg-transparent p-0 text-text backdrop:bg-black/60 backdrop:backdrop-blur-sm"
       >
         {open && (
           <div className="flex h-full flex-col gap-1 overflow-y-auto border-l border-border bg-surface p-4">
@@ -193,7 +204,7 @@ export function Nav({ user, unread }: { user: NavUser; unread: number }) {
               ...items,
               { href: "/regler", label: "Regler & priser", icon: BookOpen },
               ...(user ? [{ href: "/notiser", label: "Notiser", icon: Bell }, { href: "/profil", label: "Profil & inställningar", icon: Settings }] : []),
-              ...(user?.role === "ADMIN" ? [{ href: "/admin", label: "Admin", icon: Shield }] : []),
+              { href: "/simulering", label: "Simulering", icon: FlaskConical },
             ].map((i) => (
               <Link
                 key={i.href}
@@ -206,6 +217,27 @@ export function Nav({ user, unread }: { user: NavUser; unread: number }) {
                 {i.label}
               </Link>
             ))}
+            {user?.role === "ADMIN" && (
+              <div className="mt-3 border-t border-border pt-3">
+                <p className="mb-1 flex items-center gap-2 px-3 text-xs font-semibold uppercase tracking-widest text-gold">
+                  <Shield className="size-3.5" /> Tipskontoret
+                </p>
+                {ADMIN_LINKS.map((i) => {
+                  const on = i.href === "/admin" ? path === "/admin" : path.startsWith(i.href);
+                  return (
+                    <Link
+                      key={i.href}
+                      href={i.href}
+                      aria-current={on ? "page" : undefined}
+                      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold ${on ? "bg-surface-3 text-gold" : "text-text hover:bg-surface-3"}`}
+                    >
+                      <i.icon className="size-4 text-muted" />
+                      {i.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
             {user && (
               <form action={logout} className="mt-auto pt-4">
                 <button className="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-xl px-3 font-semibold text-danger hover:bg-surface-3">

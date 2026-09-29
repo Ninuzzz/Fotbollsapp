@@ -27,10 +27,9 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const user = await getCurrentUser();
-  const season = await getActiveSeason();
+  // Oberoende frågor körs parallellt (och cachas per förfrågan, så sidan kan återanvända dem)
+  const [user, season, demo] = await Promise.all([getCurrentUser(), getActiveSeason(), isDemoMode()]);
   const unread = user ? (await inboxFor(user.id, season?.id)).filter((n) => !n.read).length : 0;
-  const demo = await isDemoMode();
   // Personalisering: favoritlagets färger styr accentfärgen
   const teamStyle = user?.favoriteTeam
     ? ({ "--team": user.favoriteTeam.primaryColor, "--team-2": user.favoriteTeam.secondaryColor } as React.CSSProperties)

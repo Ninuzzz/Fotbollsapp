@@ -43,7 +43,7 @@ export function LeagueTable({
   highlightTeamId?: string | null;
 }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border">
+    <div className="relative overflow-x-auto rounded-2xl border border-border">
       <table className="w-full min-w-[320px] text-sm">
         <thead className="bg-surface-2 text-xs uppercase tracking-wider text-muted">
           <tr>

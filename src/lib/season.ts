@@ -1,14 +1,16 @@
+import { cache } from "react";
 import { db } from "./db";
 import { computeErrors, rankEntries, type Ranked, type TeamDiff } from "./scoring";
 import { computeAwards, AWARD_LABEL, type AwardKind } from "./awards";
 import { distributePrizes, lastPlace, parseSplit, prizePool } from "./prizes";
 
-export async function getActiveSeason() {
+/** Cachas per förfrågan: layouten och sidan frågar båda efter säsongen. */
+export const getActiveSeason = cache(async () => {
   return (
     (await db.season.findFirst({ where: { isActive: true }, orderBy: { year: "desc" } })) ??
     (await db.season.findFirst({ orderBy: { year: "desc" } }))
   );
-}
+});
 
 export type Season = NonNullable<Awaited<ReturnType<typeof getActiveSeason>>>;
 
@@ -96,9 +98,14 @@ export async function computeLeaderboard(seasonId: string) {
   return { snapshot, ranked, leaderGoals, leaderAssists };
 }
 
+/**
+ * Samma tipstabell behövs flera gånger per sidvisning (sidan + prispotten). Den cachade varianten räknas
+ * bara ut en gång per förfrågan. Skrivande kod (recordSnapshot) använder den ocachade computeLeaderboard.
+ */
+export const getLeaderboard = cache((seasonId: string) => computeLeaderboard(seasonId));
+
 export async function computePrizes(seasonId: string) {
-  const season = await db.season.findUniqueOrThrow({ where: { id: seasonId } });
-  const { ranked } = await computeLeaderboard(seasonId);
+  const [season, { ranked }] = await Promise.all([db.season.findUniqueOrThrow({ where: { id: seasonId } }), getLeaderboard(seasonId)]);
   const participants = await db.entry.count({
     where: { seasonId, OR: [{ paymentStatus: "CONFIRMED" }, { freeEntry: true }] },
   });

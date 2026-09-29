@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/auth";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { computePrizes, getActiveSeason, getLatestSnapshot, seasonPhase } from "@/lib/season";
@@ -10,6 +11,8 @@ import { clearDemoData, runSync, sendDeadlineReminder } from "@/app/actions/admi
 import { ActionButton } from "./ui";
 
 export default async function AdminHome() {
+  // Skyddet i layouten räcker inte: sidor kan renderas utan layouten (RSC-förfrågningar)
+  await requireAdmin();
   const season = await getActiveSeason();
   if (!season) return <Card>Skapa en tävling under <Link href="/admin/tavlingar" className="text-gold underline">Tävlingar</Link>.</Card>;
   const [entries, users, snapshot, lastSyncRaw, demo, prizes] = await Promise.all([

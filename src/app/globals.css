@@ -50,6 +50,8 @@
 }
 
 html {
+  /* Skyddsnät: inget enskilt element ska kunna göra sidan bredare än skärmen (mobilen zoomar då ut allt) */
+  overflow-x: clip;
   color-scheme: dark;
   scroll-behavior: smooth;
 }
@@ -152,6 +154,28 @@ summary:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Startsidans hero animeras in med CSS direkt vid första bildrutan – ingen väntan på JavaScript */
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    translate: 0 var(--reveal-y, 28px);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-intro {
+    animation: reveal-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0s) both;
+  }
+}
+
+@keyframes loading-fade {
+  from {
+    opacity: 0;
+  }
+}
+.loading-fade {
+  animation: loading-fade 0.2s ease-out 0.15s both;
 }
 
 @keyframes ball-spin {

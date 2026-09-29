@@ -179,7 +179,7 @@ export function TipForm({
               {odds.isExample && <Badge tone="neutral">Exempeldata</Badge>}
             </div>
             <p className="mt-1 text-sm text-muted">Odds på seriesegrare. Procenten är snittet av bolagens sannolikhet, med marginalen borträknad.</p>
-            <div className="mt-4 overflow-x-auto">
+            <div className="mt-4 relative overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-xs uppercase tracking-wider text-muted">
                   <tr>

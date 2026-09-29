@@ -1,7 +1,10 @@
+import { requireAdmin } from "@/lib/auth";
 import { getActiveSeason, getLatestSnapshot, getSeasonTeams } from "@/lib/season";
 import { StandingsEditor } from "./editor";
 
 export default async function StandingsAdmin() {
+  // Skyddet i layouten räcker inte: sidor kan renderas utan layouten (RSC-förfrågningar)
+  await requireAdmin();
   const season = await getActiveSeason();
   if (!season) return null;
   const [teams, snap] = await Promise.all([getSeasonTeams(season.id), getLatestSnapshot(season.id)]);

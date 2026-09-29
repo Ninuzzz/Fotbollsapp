@@ -2,12 +2,12 @@ import Link from "next/link";
 import { AlertCircle, ArrowRight, CheckCircle2, Clock, Goal, Handshake, PenLine, Star } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { computePrizes, getActiveSeason, rankHistory, seasonPhase } from "@/lib/season";
-import { Badge, ButtonLink, Card, SectionTitle, Stat } from "@/components/ui";
+import { computePrizes, getActiveSeason, getLatestSnapshot, rankHistory, seasonPhase } from "@/lib/season";
+import { Badge, ButtonLink, Card, SectionTitle } from "@/components/ui";
 import { TeamCrest } from "@/components/team-crest";
 import { Avatar } from "@/components/avatar";
 import { RankMove } from "@/components/rank-move";
-import { RankChart } from "@/components/charts";
+import { RankChart } from "@/components/rank-chart-lazy";
 import { PlayerFace } from "@/components/player-face";
 import { Reveal } from "@/components/motion";
 import { Countdown } from "@/components/countdown";
@@ -21,30 +21,27 @@ export default async function MyPage() {
   const season = await getActiveSeason();
   if (!season) return null;
   const phase = seasonPhase(season);
-  const [entry, prizes, history] = await Promise.all([
+  const team = user.favoriteTeam;
+  // Alla frågor är oberoende av varandra – kör dem parallellt i stället för efter varandra
+  const [entry, prizes, history, snapshot, star, players, assistLeader] = await Promise.all([
     db.entry.findUnique({
       where: { userId_seasonId: { userId: user.id, seasonId: season.id } },
       include: { rows: true, topScorer: { include: { team: true } }, topAssist: { include: { team: true } } },
     }),
     computePrizes(season.id),
     rankHistory(season.id),
+    getLatestSnapshot(season.id),
+    // Stjärnspelare: admins val, annars lagets bästa målskytt i år
+    team
+      ? team.starPlayer
+        ? Promise.resolve({ name: team.starPlayer, photoUrl: team.starPlayerPhoto, goals: null as number | null, assists: null as number | null })
+        : db.player.findFirst({ where: { seasonId: season.id, teamId: team.id }, orderBy: [{ goals: "desc" }, { assists: "desc" }] })
+      : Promise.resolve(null),
+    db.player.findMany({ where: { seasonId: season.id }, orderBy: { goals: "desc" }, take: 1 }),
+    db.player.findFirst({ where: { seasonId: season.id }, orderBy: { assists: "desc" } }),
   ]);
   const { ranked } = prizes;
   const me = ranked.find((r) => r.user.id === user.id);
-  const snapshot = await db.standingSnapshot.findFirst({
-    where: { seasonId: season.id },
-    orderBy: [{ round: "desc" }, { createdAt: "desc" }],
-    include: { rows: { include: { team: true }, orderBy: { position: "asc" } } },
-  });
-  const team = user.favoriteTeam;
-  // Stjärnspelare: admins val, annars lagets bästa målskytt i år
-  const star = team
-    ? team.starPlayer
-      ? { name: team.starPlayer, photoUrl: team.starPlayerPhoto, goals: null as number | null, assists: null as number | null }
-      : await db.player.findFirst({ where: { seasonId: season.id, teamId: team.id }, orderBy: [{ goals: "desc" }, { assists: "desc" }] })
-    : null;
-  const players = await db.player.findMany({ where: { seasonId: season.id }, orderBy: { goals: "desc" }, take: 1 });
-  const assistLeader = await db.player.findFirst({ where: { seasonId: season.id }, orderBy: { assists: "desc" } });
   const payout = me ? prizes.payouts.find((p) => p.id === me.id) : undefined;
   const isLast = me ? prizes.losers.includes(me.id) : false;
 
@@ -134,78 +131,78 @@ export default async function MyPage() {
 
       {me && snapshot && (
         <>
-          {/* NYCKELTAL */}
-          <section className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <Reveal>
-              <Stat
-                label="Placering"
-                value={
-                  <span className="flex items-baseline gap-3">
-                    {me.rank}
-                    <span className="text-2xl">
-                      <RankMove previous={me.previousRank} current={me.rank} />
-                    </span>
+          {/* NYCKELTAL – ett kort med avdelare i stället för fyra separata lådor */}
+          <Reveal>
+            <section className="card mt-8 grid grid-cols-2 lg:grid-cols-4 [&>div]:border-border/70 [&>div]:p-5 md:[&>div]:p-6">
+              <div className="border-b border-r lg:border-b-0">
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted">Placering</p>
+                <p className="font-display mt-2 flex items-baseline gap-3 text-5xl text-gold md:text-6xl">
+                  {me.rank}
+                  <span className="text-2xl">
+                    <RankMove previous={me.previousRank} current={me.rank} />
                   </span>
-                }
-                hint={`av ${ranked.length} tippare`}
-                tone="gold"
-              />
-            </Reveal>
-            <Reveal delay={0.05}>
-              <Stat label="Antal fel" value={me.errors} hint={`Ledaren har ${ranked[0]?.errors ?? 0} fel`} tone="danger" />
-            </Reveal>
-            <Reveal delay={0.1}>
-              <Stat label="Exakt rätt" value={me.exact} hint="lag på rätt placering" tone="pitch" />
-            </Reveal>
-            <Reveal delay={0.15}>
-              <Stat
-                label="Om säsongen slutade nu"
-                value={payout ? kr(payout.amount) : isLast ? "Gratis" : "–"}
-                hint={payout ? (payout.shared > 1 ? `delad ${payout.rank}:a plats` : `${payout.rank}:a plats`) : isLast ? "nästa år (sistaplatsen)" : "utanför prisplats"}
-              />
-            </Reveal>
-          </section>
+                </p>
+                <p className="mt-1 text-sm text-muted">av {ranked.length} tippare</p>
+              </div>
+              <div className="border-b lg:border-b-0 lg:border-r">
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted">Antal fel</p>
+                <p className="font-display mt-2 text-5xl text-danger md:text-6xl">{me.errors}</p>
+                <p className="mt-1 text-sm text-muted">ledaren har {ranked[0]?.errors ?? 0}</p>
+              </div>
+              <div className="border-r">
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted">Exakt rätt</p>
+                <p className="font-display mt-2 text-5xl text-pitch md:text-6xl">{me.exact}</p>
+                <p className="mt-1 text-sm text-muted">lag på rätt plats</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted">Om det slutade nu</p>
+                <p className="font-display mt-2 text-5xl md:text-6xl">{payout ? kr(payout.amount) : isLast ? "Gratis" : "–"}</p>
+                <p className="mt-1 text-sm text-muted">
+                  {payout ? (payout.shared > 1 ? `delad ${payout.rank}:a plats` : `${payout.rank}:a plats`) : isLast ? "nästa år (sistaplatsen)" : "utanför prisplats"}
+                </p>
+              </div>
+            </section>
+          </Reveal>
 
-          {/* UTSLAGSFRÅGOR */}
-          <section className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
-            {[
-              { icon: Goal, label: "Din skytteligavinnare", p: entry?.topScorer, v: me.scorerGoals, gap: me.scorerGap, unit: "mål", leader: players[0] },
-              { icon: Handshake, label: "Din assistkung", p: entry?.topAssist, v: me.assistCount, gap: me.assistGap, unit: "assist", leader: assistLeader },
-            ].map((t) => (
-              <Reveal key={t.label}>
-                <Card className="flex items-center gap-4">
+          {/* UTSLAGSFRÅGOR – ett kort, två rader */}
+          <Reveal>
+            <section className="card mt-4 divide-y divide-border/70" aria-label="Utslagsfrågor">
+              {[
+                { icon: Goal, label: "Din skytteligavinnare", p: entry?.topScorer, v: me.scorerGoals, gap: me.scorerGap, unit: "mål", leader: players[0] },
+                { icon: Handshake, label: "Din assistkung", p: entry?.topAssist, v: me.assistCount, gap: me.assistGap, unit: "assist", leader: assistLeader },
+              ].map((t) => (
+                <div key={t.label} className="flex items-center gap-4 p-4 md:px-6">
                   {t.p ? (
-                    <PlayerFace name={t.p.name} photoUrl={t.p.photoUrl} team={t.p.team} size={64} />
+                    <PlayerFace name={t.p.name} photoUrl={t.p.photoUrl} team={t.p.team} size={48} />
                   ) : (
-                    <div className="grid size-16 shrink-0 place-items-center rounded-full bg-surface-3">
-                      <t.icon className="size-7 text-gold" />
+                    <div className="grid size-12 shrink-0 place-items-center rounded-full bg-surface-3">
+                      <t.icon className="size-6 text-gold" />
                     </div>
                   )}
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold uppercase tracking-widest text-muted">{t.label}</p>
-                    <p className="font-display text-3xl">{t.p?.name ?? "Ej vald"}</p>
-                    {t.p && <p className="text-sm text-muted">{t.p.team.name}</p>}
-                  </div>
-                  <div className="text-right">
-                    <p className="font-display text-5xl text-gold">{t.v ?? "–"}</p>
-                    <p className="text-xs text-muted">
-                      {t.gap === 0 ? "leder ligan!" : t.gap !== null ? `${t.gap} ${t.unit} efter ${t.leader?.name ?? "ledaren"}` : t.unit}
+                    <p className="truncate text-lg font-semibold">
+                      {t.p?.name ?? "Ej vald"}
+                      {t.p && <span className="ml-2 text-sm font-normal text-muted">{t.p.team.shortName}</span>}
                     </p>
                   </div>
-                </Card>
-              </Reveal>
-            ))}
-          </section>
+                  <div className="text-right">
+                    <p className="font-display text-4xl text-gold">{t.v ?? "–"}</p>
+                    <p className="text-xs text-muted">
+                      {t.gap === 0 ? "leder ligan" : t.gap !== null ? `${t.gap} ${t.unit} efter ${t.leader?.name ?? "ledaren"}` : t.unit}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </section>
+          </Reveal>
 
           {/* PER LAG */}
           <section className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <div>
               <SectionTitle>Ditt tips mot verkligheten</SectionTitle>
-              <p className="-mt-2 mb-4 text-muted">
-                <CheckCircle2 className="mr-1 inline size-4 text-pitch" />
-                {me.exact} lag på exakt rätt placering. För övriga lag syns hur många placeringar fel du har just nu.
-              </p>
-              <div className="overflow-x-auto rounded-2xl border border-border">
+              <p className="-mt-2 mb-4 text-sm text-muted">Fel per lag just nu. ↑ = laget ligger bättre till än du tippat.</p>
+              <div className="relative overflow-x-auto rounded-2xl border border-border">
                 <table className="w-full text-sm">
                   <thead className="bg-surface-2 text-xs uppercase tracking-wider text-muted">
                     <tr>
@@ -236,13 +233,15 @@ export default async function MyPage() {
                                 <CheckCircle2 className="size-3.5" /> Exakt
                               </Badge>
                             ) : diff !== null ? (
-                              <div className="flex items-center gap-2" title={better ? "Laget ligger bättre till än du tippat" : "Laget ligger sämre till än du tippat"}>
-                                <div className="hidden h-2 w-24 overflow-hidden rounded-full bg-surface-3 sm:block" aria-hidden>
-                                  <div className={`h-full rounded-full ${diff <= 2 ? "bg-gold" : "bg-danger"}`} style={{ width: `${Math.min(100, (diff / 10) * 100)}%` }} />
-                                </div>
-                                <span className={`font-bold tabular-nums ${diff <= 2 ? "text-gold" : "text-danger"}`}>{diff}</span>
-                                <span className="text-xs text-faint">{better ? "↑" : "↓"}</span>
-                              </div>
+                              <span
+                                className={`inline-flex items-center gap-1 font-bold tabular-nums ${diff <= 2 ? "text-gold" : "text-danger"}`}
+                                title={better ? "Laget ligger bättre till än du tippat" : "Laget ligger sämre till än du tippat"}
+                              >
+                                {diff}
+                                <span className="font-normal text-muted" aria-label={better ? "bättre än tippat" : "sämre än tippat"}>
+                                  {better ? "↑" : "↓"}
+                                </span>
+                              </span>
                             ) : null}
                           </td>
                         </tr>
@@ -259,7 +258,6 @@ export default async function MyPage() {
                   </tfoot>
                 </table>
               </div>
-              <p className="mt-2 text-xs text-faint">↑ = laget ligger bättre till än du tippat · ↓ = sämre</p>
             </div>
             <div>
               <SectionTitle action={<Link href="/tipstabell#trender" className="text-sm font-semibold text-gold hover:underline">Jämför</Link>}>

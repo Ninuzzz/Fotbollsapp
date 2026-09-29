@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { apiUser, hashPassword, verifyPassword } from "@/lib/auth";
+import { apiUser, currentSessionId, hashPassword, verifyPassword } from "@/lib/auth";
 import { getActiveSeason } from "@/lib/season";
 import { registrationOpen } from "@/lib/demo";
 import { isValidAvatar, rateLimit } from "@/lib/security";
@@ -75,6 +75,9 @@ export async function changePassword(input: z.input<typeof pwSchema>) {
   const full = await db.user.findUniqueOrThrow({ where: { id: user.id } });
   if (!(await verifyPassword(p.data.current, full.passwordHash))) return { ok: false, error: "Nuvarande lösenord stämmer inte." };
   await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(p.data.next) } });
+  // Logga ut alla andra enheter, ifall någon annan kom åt det gamla lösenordet
+  const current = await currentSessionId();
+  await db.session.deleteMany({ where: { userId: user.id, ...(current ? { NOT: { id: current } } : {}) } });
   return { ok: true };
 }
 
