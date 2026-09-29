@@ -15,7 +15,7 @@ export function Composer() {
     <Card>
       <h3 className="font-display mb-4 text-2xl">Nytt utskick</h3>
       <form
-        className="grid gap-4 md:grid-cols-2"
+        className="grid grid-cols-1 gap-4 md:grid-cols-2"
         onSubmit={(e) => {
           e.preventDefault();
           if (!confirm(`Skicka "${f.title}" till ${f.audience === "ALL" ? "alla" : f.audience === "PAID" ? "betalande" : "de som saknar tips"}?`)) return;

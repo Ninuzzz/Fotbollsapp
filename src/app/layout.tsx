@@ -4,7 +4,7 @@ import "./globals.css";
 import { Nav, Footer } from "@/components/nav";
 import { MotionProvider, ScrollProgress } from "@/components/motion";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { isDemoMode } from "@/lib/demo";
 import { inboxFor } from "@/lib/notify";
 import { getActiveSeason } from "@/lib/season";
 import { ServiceWorkerRegister } from "@/components/sw-register";
@@ -30,7 +30,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const user = await getCurrentUser();
   const season = await getActiveSeason();
   const unread = user ? (await inboxFor(user.id, season?.id)).filter((n) => !n.read).length : 0;
-  const demo = (await db.setting.findUnique({ where: { key: "demoData" } }))?.value === "true";
+  const demo = await isDemoMode();
   // Personalisering: favoritlagets färger styr accentfärgen
   const teamStyle = user?.favoriteTeam
     ? ({ "--team": user.favoriteTeam.primaryColor, "--team-2": user.favoriteTeam.secondaryColor } as React.CSSProperties)

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { apiUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { getActiveSeason } from "@/lib/season";
+import { registrationOpen } from "@/lib/demo";
 import { isValidAvatar, rateLimit } from "@/lib/security";
 import { sendNotification } from "@/lib/notify";
 import { sanitizeText } from "@/lib/sanitize";
@@ -92,7 +93,7 @@ export async function claimPayment(input: z.input<typeof paySchema>) {
   const entry = await db.entry.findUnique({ where: { userId_seasonId: { userId: user.id, seasonId: season.id } } });
   if (entry?.paymentStatus === "CONFIRMED") return { ok: true };
   if (!entry) {
-    if (new Date() > season.registrationDeadline) return { ok: false, error: "Anmälan är stängd" };
+    if (!(await registrationOpen(season))) return { ok: false, error: "Anmälan är stängd" };
     await db.entry.create({ data: { userId: user.id, seasonId: season.id, paymentStatus: "CLAIMED", paidBy: p.data.paidBy || null } });
   } else if (entry.paymentStatus !== "CONFIRMED") {
     await db.entry.update({ where: { id: entry.id }, data: { paymentStatus: "CLAIMED", paidBy: p.data.paidBy || null } });

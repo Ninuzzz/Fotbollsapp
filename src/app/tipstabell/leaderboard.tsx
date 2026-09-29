@@ -83,7 +83,7 @@ export function Leaderboard({
 
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-center gap-2" role="tablist" aria-label="Filtrera">
+      <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label="Filtrera">
         {(
           [
             ["all", "Alla", null],
@@ -93,8 +93,8 @@ export function Leaderboard({
         ).map(([id, label]) => (
           <button
             key={id}
-            role="tab"
-            aria-selected={filter === id}
+            type="button"
+            aria-pressed={filter === id}
             onClick={() => setFilter(id)}
             className={`min-h-11 cursor-pointer rounded-xl px-4 text-sm font-semibold transition ${
               filter === id ? "bg-gold text-[#1f1800]" : "bg-surface-2 text-muted hover:text-text"
@@ -204,7 +204,7 @@ export function Leaderboard({
               {optimisticFollowing.length ? "Du och ditt gäng" : "Du och topp 5"}, omgång för omgång.
             </p>
           </div>
-          <div className="flex rounded-xl border border-border p-1" role="tablist" aria-label="Mått">
+          <div className="flex rounded-xl border border-border p-1" role="group" aria-label="Mått">
             {(
               [
                 ["rank", "Placering"],
@@ -213,8 +213,8 @@ export function Leaderboard({
             ).map(([id, l]) => (
               <button
                 key={id}
-                role="tab"
-                aria-selected={metric === id}
+                type="button"
+                aria-pressed={metric === id}
                 onClick={() => setMetric(id)}
                 className={`min-h-10 cursor-pointer rounded-lg px-3 text-sm font-semibold ${metric === id ? "bg-surface-3" : "text-muted"}`}
               >

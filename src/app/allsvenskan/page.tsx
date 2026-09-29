@@ -82,7 +82,7 @@ export default async function LeaguePage() {
         )}
       </PageHeader>
       {snapshot ? (
-        <div className="grid gap-10 xl:grid-cols-[1.5fr_1fr]">
+        <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
           <div>
             <LeagueTable rows={snapshot.rows} tipped={tipped} highlightTeamId={user?.favoriteTeamId} />
             <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted">

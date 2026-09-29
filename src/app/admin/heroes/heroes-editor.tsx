@@ -13,7 +13,7 @@ function HeroForm({ hero, onDone }: { hero: H; onDone?: () => void }) {
   const { pending, result, run } = useAdminAction();
   return (
     <form
-      className="grid gap-3 sm:grid-cols-[6rem_1fr_6rem]"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-[6rem_minmax(0,1fr)_6rem]"
       onSubmit={(e) => {
         e.preventDefault();
         run(() => saveHero({ ...h, errors: h.errors ?? null }), onDone);
@@ -77,7 +77,7 @@ export function HeroesEditor({ heroes, history }: { heroes: H[]; history: { year
           <HeroForm hero={{ year: next, name: "", description: "", imageUrl: "", errors: null, consent: false }} onDone={() => setOpen(null)} />
         </Card>
       )}
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {heroes.map((h) => (
           <Card key={h.id} className="p-4">
             <button type="button" className="flex w-full cursor-pointer items-center gap-3 text-left" onClick={() => setOpen(open === h.id ? null : h.id!)} aria-expanded={open === h.id}>

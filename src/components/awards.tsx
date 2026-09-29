@@ -15,7 +15,7 @@ export function AwardCards({
 }) {
   const kinds: AwardKind[] = ["ROCKET", "DIVE", "YOYO"];
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {kinds.map((k) => {
         const list = awards.filter((a) => a.kind === k);
         const m = META[k];

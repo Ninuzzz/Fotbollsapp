@@ -35,16 +35,15 @@ export function AvatarBuilder({ value, onChange, name }: { value: string; onChan
   };
 
   return (
-    <div className="grid gap-6 md:grid-cols-[auto_1fr]">
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-[auto_minmax(0,1fr)]">
       <div className="flex flex-col items-center gap-3">
         <div className="rounded-full bg-gradient-to-b from-team/40 to-transparent p-2">
           <Avatar value={value} name={name} size={132} />
         </div>
-        <div className="flex rounded-xl border border-border p-1" role="tablist" aria-label="Typ av avatar">
+        <div className="flex rounded-xl border border-border p-1" role="group" aria-label="Typ av avatar">
           <button
             type="button"
-            role="tab"
-            aria-selected={mode === "jersey"}
+            aria-pressed={mode === "jersey"}
             onClick={() => {
               setMode("jersey");
               onChange(jerseyString(jersey));
@@ -55,8 +54,7 @@ export function AvatarBuilder({ value, onChange, name }: { value: string; onChan
           </button>
           <button
             type="button"
-            role="tab"
-            aria-selected={mode === "image"}
+            aria-pressed={mode === "image"}
             onClick={() => file.current?.click()}
             className={`flex min-h-10 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-sm font-semibold ${mode === "image" ? "bg-surface-3" : "text-muted"}`}
           >

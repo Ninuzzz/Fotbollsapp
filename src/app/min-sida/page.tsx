@@ -61,7 +61,7 @@ export default async function MyPage() {
             <TeamCrest team={team} size={360} />
           </div>
         )}
-        <div className="relative grid gap-8 md:grid-cols-[1fr_auto] md:items-end">
+        <div className="relative grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
           <div className="flex items-center gap-5">
             <Avatar value={user.avatar} name={user.name} size={88} className="ring-4 ring-team" />
             <div>
@@ -167,7 +167,7 @@ export default async function MyPage() {
           </section>
 
           {/* UTSLAGSFRÅGOR */}
-          <section className="mt-8 grid gap-4 md:grid-cols-2">
+          <section className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
             {[
               { icon: Goal, label: "Din skytteligavinnare", p: entry?.topScorer, v: me.scorerGoals, gap: me.scorerGap, unit: "mål", leader: players[0] },
               { icon: Handshake, label: "Din assistkung", p: entry?.topAssist, v: me.assistCount, gap: me.assistGap, unit: "assist", leader: assistLeader },
@@ -198,14 +198,14 @@ export default async function MyPage() {
           </section>
 
           {/* PER LAG */}
-          <section className="mt-12 grid gap-8 lg:grid-cols-[1.3fr_1fr]">
+          <section className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <div>
               <SectionTitle>Ditt tips mot verkligheten</SectionTitle>
               <p className="-mt-2 mb-4 text-muted">
                 <CheckCircle2 className="mr-1 inline size-4 text-pitch" />
                 {me.exact} lag på exakt rätt placering. För övriga lag syns hur många placeringar fel du har just nu.
               </p>
-              <div className="overflow-hidden rounded-2xl border border-border">
+              <div className="overflow-x-auto rounded-2xl border border-border">
                 <table className="w-full text-sm">
                   <thead className="bg-surface-2 text-xs uppercase tracking-wider text-muted">
                     <tr>
@@ -237,7 +237,7 @@ export default async function MyPage() {
                               </Badge>
                             ) : diff !== null ? (
                               <div className="flex items-center gap-2" title={better ? "Laget ligger bättre till än du tippat" : "Laget ligger sämre till än du tippat"}>
-                                <div className="h-2 w-24 overflow-hidden rounded-full bg-surface-3" aria-hidden>
+                                <div className="hidden h-2 w-24 overflow-hidden rounded-full bg-surface-3 sm:block" aria-hidden>
                                   <div className={`h-full rounded-full ${diff <= 2 ? "bg-gold" : "bg-danger"}`} style={{ width: `${Math.min(100, (diff / 10) * 100)}%` }} />
                                 </div>
                                 <span className={`font-bold tabular-nums ${diff <= 2 ? "text-gold" : "text-danger"}`}>{diff}</span>

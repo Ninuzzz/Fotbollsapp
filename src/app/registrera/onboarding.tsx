@@ -12,7 +12,7 @@ import { AvatarBuilder } from "@/components/avatar-builder";
 import { fmtDate } from "@/lib/format";
 
 type Team = { id: string; name: string; shortName: string; logoUrl: string | null; primaryColor: string; secondaryColor: string };
-type SeasonInfo = { name: string; entryFee: number; swishNumber: string; registrationDeadline: string; open: boolean } | null;
+type SeasonInfo = { name: string; entryFee: number; swishNumber: string; registrationDeadline: string; open: boolean; demo: boolean } | null;
 
 const STEPS = ["Konto", "Favoritlag", "Avatar", "Betalning"];
 
@@ -203,7 +203,13 @@ export function Onboarding({ teams, season }: { teams: Team[]; season: SeasonInf
                 <p className="mt-1 text-muted">
                   Anders bekräftar betalningen. Därefter blir du aktiv spelare och kan spara ditt tips och använda chatten.
                 </p>
-                <div className="mt-6 grid gap-6 md:grid-cols-[auto_1fr]">
+                {season.demo && (
+                  <p role="note" className="mt-4 rounded-xl border border-info/40 bg-info/10 px-4 py-3 text-sm">
+                    <strong>Demoläge:</strong> du behöver inte swisha på riktigt. Välj ”Jag har swishat själv” och slutför. Anders får då en
+                    notis, och din anmälan dyker upp under <strong>Admin → Deltagare</strong> där han kan bekräfta betalningen.
+                  </p>
+                )}
+                <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-[auto_minmax(0,1fr)]">
                   <div className="flex flex-col items-center gap-3 rounded-2xl bg-white p-4 text-[#050b08]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {qr ? <img src={qr} alt="QR-kod för Swish-betalning" width={180} height={180} /> : <div className="size-[180px]" />}

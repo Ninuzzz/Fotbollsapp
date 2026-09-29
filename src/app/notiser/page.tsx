@@ -31,7 +31,7 @@ export default async function NotificationsPage() {
       <PageHeader kicker="Inkorg" title="Notiser">
         Alla utskick samlade, så att du kan läsa det du missat i efterhand.
       </PageHeader>
-      <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section aria-label="Notishistorik">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm text-muted">{unread ? `${unread} olästa` : "Allt läst"}</p>

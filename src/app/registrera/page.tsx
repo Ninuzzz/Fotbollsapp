@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveSeason, getSeasonTeams } from "@/lib/season";
+import { isDemoMode, registrationOpen } from "@/lib/demo";
 import { Onboarding } from "./onboarding";
 
 export const metadata = { title: "Gå med" };
@@ -9,7 +10,7 @@ export default async function RegisterPage() {
   if (await getCurrentUser()) redirect("/min-sida");
   const season = await getActiveSeason();
   const teams = season ? await getSeasonTeams(season.id) : [];
-  const open = season ? new Date() <= season.registrationDeadline : false;
+  const [open, demo] = season ? await Promise.all([registrationOpen(season), isDemoMode()]) : [false, false];
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 md:py-14">
       <Onboarding
@@ -22,6 +23,7 @@ export default async function RegisterPage() {
                 swishNumber: season.swishNumber,
                 registrationDeadline: season.registrationDeadline.toISOString(),
                 open,
+                demo,
               }
             : null
         }

@@ -18,7 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           Till sajten →
         </Link>
       </div>
-      <div className="grid gap-8 lg:grid-cols-[14rem_1fr]">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[14rem_minmax(0,1fr)]">
         <AdminNav />
         <div className="min-w-0">{children}</div>
       </div>

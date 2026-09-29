@@ -86,7 +86,7 @@ export function PlayersEditor({ players, teams }: { players: P[]; teams: { id: s
       <Card>
         <h3 className="font-display mb-3 text-2xl">Lägg till spelare</h3>
         <form
-          className="grid gap-3 sm:grid-cols-[1fr_1fr_5rem_5rem_auto] sm:items-end"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_5rem_5rem_auto] sm:items-end"
           onSubmit={(e) => {
             e.preventDefault();
             run(() => savePlayer(n), () => setN({ ...n, name: "", goals: 0, assists: 0, photoUrl: "" }));

@@ -67,7 +67,7 @@ export function Chat({ me }: { me: { id: string; role: string } }) {
 
   let lastDay = "";
   return (
-    <div className="card flex h-[calc(100dvh-16rem)] min-h-[28rem] flex-col overflow-hidden p-0 md:h-[34rem]">
+    <div className="card flex h-[calc(100dvh-21rem-env(safe-area-inset-bottom))] min-h-[20rem] flex-col overflow-hidden p-0 md:h-[34rem]">
       <div ref={listRef} className="flex-1 space-y-1 overflow-y-auto p-4" aria-live="polite" aria-label="Meddelanden">
         {messages.map((m) => {
           const day = fmtDate(m.createdAt);
@@ -88,12 +88,12 @@ export function Chat({ me }: { me: { id: string; role: string } }) {
                   )}
                   {/* React escapar innehållet – ingen HTML från användare renderas */}
                   <p className="whitespace-pre-wrap break-words">{m.body}</p>
-                  <p className="mt-0.5 text-right text-[10px] text-faint">{fmtTime(m.createdAt)}</p>
+                  <p className="mt-0.5 text-right text-[11px] text-muted">{fmtTime(m.createdAt)}</p>
                 </div>
                 {(mine || me.role === "ADMIN") && (
                   <button
                     onClick={() => remove(m.id)}
-                    className="grid size-9 cursor-pointer place-items-center rounded-lg text-faint opacity-0 transition hover:text-danger focus:opacity-100 group-hover:opacity-100"
+                    className="grid size-9 cursor-pointer place-items-center rounded-lg text-faint opacity-0 transition hover:text-danger focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                     aria-label="Ta bort meddelande"
                   >
                     <Trash2 className="size-4" />
@@ -106,7 +106,7 @@ export function Chat({ me }: { me: { id: string; role: string } }) {
       </div>
 
       {emoji && (
-        <div className="grid grid-cols-8 gap-1 border-t border-border bg-surface p-2 sm:grid-cols-16" role="listbox" aria-label="Emojis">
+        <div className="grid grid-cols-8 gap-1 border-t border-border bg-surface p-2 sm:grid-cols-16" role="group" aria-label="Emojis">
           {EMOJIS.map((e) => (
             <button
               key={e}

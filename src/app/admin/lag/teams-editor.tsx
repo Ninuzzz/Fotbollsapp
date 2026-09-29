@@ -32,7 +32,7 @@ function TeamForm({ team, onDone }: { team: T; onDone?: () => void }) {
   );
   return (
     <form
-      className="grid gap-3 sm:grid-cols-2"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2"
       onSubmit={(e) => {
         e.preventDefault();
         run(() => saveTeam(t), onDone);
@@ -92,7 +92,7 @@ export function TeamsEditor({ teams, seasonName }: { teams: T[]; seasonName: str
           />
         </Card>
       )}
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {teams.map((t) => (
           <Card key={t.id} className="p-4">
             <button type="button" onClick={() => setOpen(open === t.id ? null : t.id!)} className="flex w-full cursor-pointer items-center gap-3 text-left" aria-expanded={open === t.id}>

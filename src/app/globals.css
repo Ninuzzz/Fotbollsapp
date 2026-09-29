@@ -61,50 +61,62 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Planlinjer i bakgrunden */
-.pitch-bg {
-  background:
-    radial-gradient(1200px 500px at 50% -10%, color-mix(in oklab, var(--team) 22%, transparent), transparent 70%),
-    radial-gradient(800px 400px at 110% 10%, color-mix(in oklab, var(--gold) 10%, transparent), transparent 70%),
-    var(--bg);
+/* I lagret components så att Tailwind-utilities (hover:border-*, leading-* …) kan skriva över */
+@layer components {
+  /* Planlinjer i bakgrunden */
+  .pitch-bg {
+    background:
+      radial-gradient(1200px 500px at 50% -10%, color-mix(in oklab, var(--team) 22%, transparent), transparent 70%),
+      radial-gradient(800px 400px at 110% 10%, color-mix(in oklab, var(--gold) 10%, transparent), transparent 70%),
+      var(--bg);
+  }
+
+  .pitch-lines {
+    background-image:
+      linear-gradient(to right, color-mix(in oklab, var(--pitch) 7%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklab, var(--pitch) 7%, transparent) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  }
+
+  /* Gräsränder */
+  .grass {
+    background: repeating-linear-gradient(90deg, #0d2418 0 80px, #0b1f15 80px 160px);
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: 0.02em;
+    /* 1.0 ger plats åt prickar och ringar (Å, Ä, Ö) ovanför versalerna */
+    line-height: 1;
+  }
+
+  .card {
+    background: linear-gradient(180deg, var(--surface-2), var(--surface));
+    border: 1px solid var(--border);
+    border-radius: 1.25rem;
+  }
+
+  .glow-gold {
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--gold) 45%, transparent), 0 10px 40px -10px color-mix(in oklab, var(--gold) 45%, transparent);
+  }
+
+  .text-gradient-gold {
+    background: linear-gradient(180deg, #fff3b0, var(--gold) 55%, #b88a00);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
 }
 
-.pitch-lines {
-  background-image:
-    linear-gradient(to right, color-mix(in oklab, var(--pitch) 7%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in oklab, var(--pitch) 7%, transparent) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
-}
-
-/* Gräsränder */
-.grass {
-  background: repeating-linear-gradient(90deg, #0d2418 0 80px, #0b1f15 80px 160px);
-}
-
-.font-display {
-  font-family: var(--font-display);
-  letter-spacing: 0.02em;
-  line-height: 0.95;
-}
-
-.card {
-  background: linear-gradient(180deg, var(--surface-2), var(--surface));
-  border: 1px solid var(--border);
-  border-radius: 1.25rem;
-}
-
-.glow-gold {
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--gold) 45%, transparent), 0 10px 40px -10px color-mix(in oklab, var(--gold) 45%, transparent);
-}
-
-.text-gradient-gold {
-  background: linear-gradient(180deg, #fff3b0, var(--gold) 55%, #b88a00);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
+/* Fokusringen ligger utanför lagren med avsikt: ingen utility (t.ex. outline-none) ska kunna dölja den */
 .focus-ring {
   outline: none;
 }
@@ -113,16 +125,10 @@ a:focus-visible,
 button:focus-visible,
 select:focus-visible,
 input:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+summary:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
-}
-
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  scrollbar-width: none;
 }
 
 /* Säker yta för bottennavigering på mobil */

@@ -50,7 +50,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
         </Parallax>
         <div className="absolute left-1/2 top-24 -z-10 size-[38rem] -translate-x-1/2 rounded-full border border-pitch/15 md:size-[52rem]" aria-hidden />
         <div className="absolute left-1/2 top-0 -z-10 h-full w-px bg-pitch/10" aria-hidden />
-        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 pb-16 pt-12 md:px-6 md:pb-28 md:pt-20 lg:grid-cols-[1.2fr_1fr]">
+        <div className="mx-auto grid grid-cols-1 max-w-7xl items-center gap-10 px-4 pb-16 pt-12 md:px-6 md:pb-28 md:pt-20 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
           <div>
             <Reveal>
               <Badge tone="gold" className="mb-5">
@@ -187,7 +187,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gold">Så funkar det</p>
           <h2 className="font-display mt-2 text-5xl md:text-7xl">Tre steg till muggen</h2>
         </Reveal>
-        <div className="mt-12 grid gap-5 md:grid-cols-3">
+        <div className="mt-12 grid grid-cols-1 gap-5 md:grid-cols-3">
           {[
             { icon: Smartphone, t: "Gå med & swisha", d: `Skapa konto, välj favoritlag och avatar. Swisha ${season.entryFee} kr till ${season.swishNumber}.` },
             { icon: ListOrdered, t: "Tippa tabellen", d: "Placera alla 16 lag, 1 till 16. Välj skytteligavinnare och assistkung. De avgör vid lika poäng!" },
@@ -215,7 +215,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gold">Live · omgång {round}</p>
             <h2 className="font-display mt-2 text-5xl md:text-7xl">Tipstabellen</h2>
           </Reveal>
-          <div className="mt-10 grid gap-8 lg:grid-cols-[1.1fr_1fr]">
+          <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
             <div className="card p-3 md:p-4">
               <Stagger className="divide-y divide-border/60">
                 {ranked.slice(0, 8).map((r) => (
@@ -250,7 +250,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
       {/* ALLSVENSKAN LIVE */}
       {snapshot && (
         <section className="mx-auto max-w-7xl px-4 py-20 md:px-6 md:py-28">
-          <div className="grid gap-10 lg:grid-cols-[1fr_1.4fr]">
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
             <Reveal>
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gold">Verkligheten</p>
               <h2 className="font-display mt-2 text-5xl md:text-7xl">Allsvenskan just nu</h2>
@@ -280,7 +280,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
               {prizes.participants} betalande × {season.entryFee} kr minus {kr(season.reservedAmount)} som avsätts till mugg, vandringspris och tröstpris.
             </p>
           </Reveal>
-          <div className="mt-10 grid gap-5 md:grid-cols-4">
+          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {split.map((pct, i) => (
               <Reveal key={i} delay={i * 0.1}>
                 <div className={`card h-full p-6 ${i === 0 ? "glow-gold" : ""}`}>
@@ -348,7 +348,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
 
       {/* CTA */}
       {!user && (
-        <section className="mx-auto max-w-4xl px-4 pb-24 text-center md:px-6">
+        <section className="mx-auto max-w-4xl px-4 pb-24 pt-20 text-center md:px-6 md:pt-28">
           <Reveal>
             <h2 className="font-display text-6xl md:text-8xl">
               Är du nästa <span className="text-gradient-gold">hero</span>?

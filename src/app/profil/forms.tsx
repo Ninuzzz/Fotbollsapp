@@ -38,7 +38,7 @@ export function ProfileForms({ user, teams, payment }: Props) {
     <div className="space-y-6">
       <Card>
         <h2 className="font-display mb-5 text-3xl">Du i tipset</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Namn">
             <input className={inputClass} value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} maxLength={60} />
           </Field>
@@ -124,7 +124,7 @@ export function ProfileForms({ user, teams, payment }: Props) {
         <h2 className="font-display mb-1 text-3xl">Byt lösenord</h2>
         <p className="mb-5 text-sm text-muted">Inloggad som {user.email}</p>
         <form
-          className="grid gap-4 sm:grid-cols-2"
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault();
             start(async () => {
@@ -172,7 +172,7 @@ export function ProfileForms({ user, teams, payment }: Props) {
             Tar bort konto, tips, chattmeddelanden, följningar, pushprenumerationer och din historik direkt. Det går inte att ångra.
           </p>
           <form
-            className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+            className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end"
             onSubmit={(e) => {
               e.preventDefault();
               if (!confirm("Radera ditt konto och all din data för gott?")) return;

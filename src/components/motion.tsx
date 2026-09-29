@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useInView, useMotionValue, useSpring, useTransform, useScroll, MotionConfig } from "motion/react";
+import { motion, useInView, useMotionValue, useSpring, useTransform, useScroll, useReducedMotion, MotionConfig } from "motion/react";
 import { useEffect, useRef, type ReactNode } from "react";
 
 /** Respektera prefers-reduced-motion i hela appen */
@@ -56,16 +56,24 @@ export function Stagger({ children, className = "", step = 0.05 }: { children: R
 export function CountUp({ to, suffix = "", className = "" }: { to: number; suffix?: string; className?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true });
+  const reduce = useReducedMotion();
   const mv = useMotionValue(0);
   const spring = useSpring(mv, { duration: 1400, bounce: 0 });
   const rounded = useTransform(spring, (v) => Math.round(v).toLocaleString("sv-SE") + suffix);
   useEffect(() => {
-    if (inView) mv.set(to);
-  }, [inView, mv, to]);
+    // Rörelsekänsliga får slutvärdet direkt i stället för en räknande siffra
+    if (reduce) {
+      mv.jump(to);
+      spring.jump(to);
+    } else if (inView) mv.set(to);
+  }, [inView, reduce, mv, spring, to]);
+  // Skärmläsare läser slutvärdet, aldrig "0" eller mellanlägen
+  const final = to.toLocaleString("sv-SE") + suffix;
   return (
-    <motion.span ref={ref} className={className}>
-      {rounded}
-    </motion.span>
+    <span ref={ref} className={className}>
+      <span className="sr-only">{final}</span>
+      <motion.span aria-hidden>{rounded}</motion.span>
+    </span>
   );
 }
 

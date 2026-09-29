@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { createSession, destroySession, hashPassword, verifyPassword } from "@/lib/auth";
 import { getActiveSeason } from "@/lib/season";
+import { registrationOpen } from "@/lib/demo";
 import { clientIp, isValidAvatar, rateLimit } from "@/lib/security";
 import { sanitizeText } from "@/lib/sanitize";
 import { sendNotification } from "@/lib/notify";
@@ -86,7 +87,7 @@ export async function register(input: z.input<typeof registerSchema>): Promise<F
     },
   });
   const season = await getActiveSeason();
-  if (season && new Date() <= season.registrationDeadline) {
+  if (season && (await registrationOpen(season))) {
     await db.entry.create({
       data: {
         userId: user.id,

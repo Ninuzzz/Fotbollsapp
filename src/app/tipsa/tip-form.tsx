@@ -92,7 +92,7 @@ export function TipForm({
   }, [players]);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
       {/* TABELLEN */}
       <section aria-labelledby="tabell-rubrik">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">

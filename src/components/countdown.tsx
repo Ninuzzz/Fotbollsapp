@@ -14,9 +14,15 @@ export function Countdown({ to }: { to: string }) {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  const p = parts(new Date(to).getTime() - (now ?? Date.now()));
+  // Server och första klientrendering visar samma sak ("–"), annars blir det hydreringsfel vid minutskiften
+  const p = parts(now === null ? 0 : new Date(to).getTime() - now);
   return (
-    <div className="flex gap-2" role="timer" aria-live="off" aria-label={`${p.d} dagar, ${p.h} timmar och ${p.m} minuter kvar`}>
+    <div
+      className="flex gap-2"
+      role="timer"
+      aria-live="off"
+      aria-label={now === null ? "Nedräkning till sista tippdag" : `${p.d} dagar, ${p.h} timmar och ${p.m} minuter kvar`}
+    >
       {[
         [p.d, "dagar"],
         [p.h, "tim"],

@@ -41,7 +41,7 @@ export function OddsEditor({
           </Button>
         ))}
       </div>
-      <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {teams.map((t) => (
           <label key={t.id} className="flex items-center gap-2 rounded-xl border border-border px-3 py-2">
             <span className="flex-1 truncate text-sm">{t.name}</span>

@@ -27,7 +27,7 @@ export default async function NewsPage() {
               <Megaphone className="size-7 text-gold" /> Från tipset
             </span>
           </SectionTitle>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {posts.map((p, i) => (
               <Reveal key={p.id} delay={i * 0.05}>
                 <article className="card h-full overflow-hidden p-0">
@@ -53,7 +53,7 @@ export default async function NewsPage() {
         </span>
       </SectionTitle>
       {news.length ? (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {news.filter((n) => isSafeUrl(n.link)).map((n, i) => (
             <Reveal key={n.link + i} delay={Math.min(i * 0.03, 0.4)}>
               <a
