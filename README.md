@@ -16,7 +16,11 @@ npm run dev                   # http://localhost:3000
 
 Testkonton efter seed (endast lokalt): `anders@allsvenskantipset.se` (admin, lösenord = `SEED_ADMIN_PASSWORD`, default i `prisma/seed.ts`) och `demo@allsvenskantipset.se`.
 
-Tester: `npm test` (poäng, tie-breakers, prispott, utmärkelser, tipsvalidering).
+Tester: `npm test` (poäng, tie-breakers, prispott, utmärkelser, tipsvalidering) och `npm run verify:season`, som spelar en hel påhittad säsong mot en egen testdatabas (`prisma/verify-season.db`) och kontrollerar tippning, förra årets tabell, notiser per omgång, uppskjutna matcher, prispott, säsongsslut, gratisplats och demodata. Kör båda innan du driftsätter en ändring.
+
+**Säsongens gång:** skapa nästa års tävling under Admin → Tävlingar – den blir aktiv direkt och trupperna hämtas. Resten sker automatiskt: påminnelser före deadline, tabell varje timme när serien startat (aldrig förra årets), en notis per färdigspelad omgång, en påminnelse till admin när sista omgången är spelad, och besked till alla med vinnarna när admin trycker Avsluta säsong. Fjolårets sistaplats får gratisplats när hen går med.
+
+**Demoläge:** Admin → Översikt → Läs in demodata / Rensa demodata. Demotippare är markerade (`User.isDemo`) och rensning rör aldrig riktiga konton. Demodata går bara att läsa in när tävlingen saknar riktiga deltagare, och finns riktiga deltagare räknas demotipparna bort ur tabell och prispott.
 
 ## Funktioner
 

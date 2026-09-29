@@ -4,7 +4,18 @@ import { NextResponse, type NextRequest } from "next/server";
  * Säkerhetsheaders för alla sidor.
  * CSP med nonce: endast egna skript (+ Next.js inline-skript med nonce) får köras.
  */
+// Sidor som kräver inloggning. Utan sessionskaka skickas besökaren direkt till inloggningen (riktig 307) –
+// sidan själv kontrollerar fortfarande behörigheten mot databasen, det här är bara ett snabbt första filter.
+const PROTECTED = ["/admin", "/min-sida", "/tipsa", "/profil", "/chatt", "/notiser", "/tippare"];
+
 export function middleware(req: NextRequest) {
+  const path = req.nextUrl.pathname;
+  if (PROTECTED.some((p) => path === p || path.startsWith(`${p}/`)) && !req.cookies.get("at_session")) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/logga-in";
+    url.search = `?next=${encodeURIComponent(path)}`;
+    return NextResponse.redirect(url, 307);
+  }
   const nonce = btoa(crypto.randomUUID());
   const dev = process.env.NODE_ENV !== "production";
   // https-uppgradering bara när sidan faktiskt nåddes över https (i drift sätter proxyn x-forwarded-proto).

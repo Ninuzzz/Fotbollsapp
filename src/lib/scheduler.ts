@@ -22,6 +22,23 @@ export async function runScheduledJobs(reason = "schemalagd") {
     } catch (e) {
       log.push(`synk misslyckades: ${(e as Error).message}`);
     }
+    // Trupper en gång per dygn: ger spelare att välja som skytt/assistkung redan före seriestart,
+    // och tar med nyförvärv och nyuppflyttade lag under säsongen
+    try {
+      const { db } = await import("./db");
+      const key = `squadsAt:${season.id}`;
+      const last = (await db.setting.findUnique({ where: { key } }))?.value;
+      if (!last || Date.now() - Date.parse(last) > 23 * HOUR) {
+        const { syncSquads } = await import("./football-api");
+        const { applyPlayerPhotos } = await import("./player-photo-archive");
+        const sq = await syncSquads(season.id);
+        const ph = await applyPlayerPhotos(db);
+        await db.setting.upsert({ where: { key }, create: { key, value: new Date().toISOString() }, update: { value: new Date().toISOString() } });
+        log.push(`trupper: ${sq.players} spelare i ${sq.teams} lag, ${ph.applied} foton från arkivet`);
+      }
+    } catch (e) {
+      log.push(`trupper misslyckades: ${(e as Error).message}`);
+    }
     // Spelarfoton från API-Football en gång per dygn (16 anrop av gratisplanens 100)
     try {
       const { db } = await import("./db");
@@ -52,7 +69,16 @@ export function startScheduler() {
   const g = globalThis as unknown as { __tipsetScheduler?: boolean };
   if (g.__tipsetScheduler) return;
   g.__tipsetScheduler = true;
-  setTimeout(() => void runScheduledJobs("vid start").catch(() => {}), 30_000).unref?.();
+  setTimeout(
+    () =>
+      void (async () => {
+        const { migrateSnapshotRounds } = await import("./season");
+        const n = await migrateSnapshotRounds().catch((e) => `misslyckades: ${(e as Error).message}`);
+        if (n) console.log(`[scheduler] omräknade omgångsnummer: ${n}`);
+        await runScheduledJobs("vid start");
+      })().catch(() => {}),
+    30_000,
+  ).unref?.();
   setInterval(() => void runScheduledJobs().catch(() => {}), HOUR).unref?.();
   console.log("[scheduler] startad – kör varje timme");
 }

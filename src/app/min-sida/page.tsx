@@ -129,6 +129,13 @@ export default async function MyPage() {
         </div>
       )}
 
+      {entry?.submittedAt && !snapshot && (
+        <div className="card mt-6 p-6 text-center">
+          <p className="font-display text-3xl">Ditt tips är inlämnat 👍</p>
+          <p className="mt-1 text-muted">Din placering, dina fel och grafen visas här när första omgången är spelad.</p>
+        </div>
+      )}
+
       {me && snapshot && (
         <>
           {/* NYCKELTAL – ett kort med avdelare i stället för fyra separata lådor */}

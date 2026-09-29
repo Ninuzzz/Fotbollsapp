@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, Smartphone } from "lucide-react";
+import { Clock, Gift, Smartphone } from "lucide-react";
 import { claimPayment } from "@/app/actions/profile";
 import { Button, Field, inputClass } from "./ui";
 
@@ -13,18 +13,50 @@ export function PaymentWaiting({
   swish,
   paidBy,
   context,
+  freeEarned = false,
 }: {
   status: string;
   fee: number;
   swish: string;
   paidBy: string;
   context: "tips" | "chatt";
+  /** Kom sist förra året → gratisplats i år */
+  freeEarned?: boolean;
 }) {
   const router = useRouter();
   const [who, setWho] = useState(paidBy);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const claimed = status === "CLAIMED";
+  if (freeEarned)
+    return (
+      <div className="card mx-auto max-w-2xl p-6 text-center md:p-10">
+        <div className="mx-auto grid size-16 place-items-center rounded-full bg-pitch/15">
+          <Gift className="size-8 text-pitch" />
+        </div>
+        <h2 className="font-display mt-4 text-4xl md:text-5xl">Du är med gratis i år</h2>
+        <p className="mx-auto mt-3 max-w-md text-muted">Du kom sist förra året, och enligt reglerna får sistaplatsen gratis medverkan. Ingen Swish behövs.</p>
+        <Button
+          variant="gold"
+          className="mt-6"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const r = await claimPayment({});
+              setMsg(r.ok ? "Klart! Du kan tippa direkt." : (r as { error?: string }).error ?? "Något gick fel");
+              router.refresh();
+            })
+          }
+        >
+          Gå med gratis
+        </Button>
+        {msg && (
+          <p role="status" className="mt-3 text-sm text-pitch">
+            {msg}
+          </p>
+        )}
+      </div>
+    );
   return (
     <div className="card mx-auto max-w-2xl p-6 text-center md:p-10">
       <div className="mx-auto grid size-16 place-items-center rounded-full bg-gold/15">

@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { apiUser, currentSessionId, hashPassword, verifyPassword } from "@/lib/auth";
 import { getActiveSeason } from "@/lib/season";
 import { registrationOpen } from "@/lib/demo";
+import { earnedFreeEntry } from "@/lib/free-entry";
 import { isValidAvatar, rateLimit } from "@/lib/security";
 import { sendNotification } from "@/lib/notify";
 import { sanitizeText } from "@/lib/sanitize";
@@ -97,6 +98,19 @@ export async function claimPayment(input: z.input<typeof paySchema>) {
   if (entry?.paymentStatus === "CONFIRMED") return { ok: true };
   if (!entry) {
     if (!(await registrationOpen(season))) return { ok: false, error: "Anmälan är stängd" };
+    // Regel: fjolårets sistaplats är med gratis – ingen Swish behövs
+    if (await earnedFreeEntry(user.id, season)) {
+      await db.entry.create({ data: { userId: user.id, seasonId: season.id, paymentStatus: "PENDING", freeEntry: true } });
+      await sendNotification({
+        type: "GENERAL",
+        audience: "ADMIN",
+        title: `${user.name} är med gratis`,
+        body: "Kom sist förra året och har därför gratisplats i år. Ingen betalning behöver bekräftas.",
+        link: "/admin/deltagare",
+      });
+      revalidatePath("/tipsa");
+      return { ok: true, free: true };
+    }
     await db.entry.create({ data: { userId: user.id, seasonId: season.id, paymentStatus: "CLAIMED", paidBy: p.data.paidBy || null } });
   } else if (entry.paymentStatus !== "CONFIRMED") {
     await db.entry.update({ where: { id: entry.id }, data: { paymentStatus: "CLAIMED", paidBy: p.data.paidBy || null } });
@@ -135,6 +149,8 @@ export async function deleteAccount(input: { password: string; confirm: string }
     // Excel utan koppling tar Anders bort manuellt om personen ber om det.
     db.hallOfFame.updateMany({ where: { userId: user.id }, data: { consent: false } }),
     db.historicalResult.deleteMany({ where: { userId: user.id } }),
+    // Utmärkelser saknar databaskoppling till deltagandet – ta bort dem, annars visas de som "?"
+    db.award.deleteMany({ where: { entryId: { in: (await db.entry.findMany({ where: { userId: user.id }, select: { id: true } })).map((e) => e.id) } } }),
     db.user.delete({ where: { id: user.id } }),
   ]);
   const { destroySession } = await import("@/lib/auth");

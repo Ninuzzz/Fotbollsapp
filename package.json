@@ -12,7 +12,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
     "vapid": "web-push generate-vapid-keys --json",
-    "photos:apply": "tsx prisma/apply-player-photos.ts"
+    "photos:apply": "tsx prisma/apply-player-photos.ts",
+    "verify:season": "tsx scripts/verify-season.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

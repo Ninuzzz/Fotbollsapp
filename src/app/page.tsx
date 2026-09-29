@@ -144,8 +144,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
               ) : (
                 <div className="card relative p-6 md:p-8">
                   <p className="text-sm font-semibold uppercase tracking-widest text-muted">
-                    Toppen just nu · omgång {round}
+                    {ranked.length ? `Toppen just nu · omgång ${round}` : "Toppen just nu"}
                   </p>
+                  {!ranked.length && <p className="mt-5 text-muted">Tipstabellen startar när första omgången är spelad. Fram till dess är allas tips hemliga.</p>}
                   <ol className="mt-5 space-y-3">
                     {ranked.slice(0, 3).map((r, i) => (
                       <li key={r.id} className="flex items-center gap-4 rounded-xl bg-bg/50 p-3">
@@ -213,7 +214,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
         <RollingBall className="absolute right-6 top-8 md:right-16" />
         <div className="mx-auto max-w-7xl px-4 md:px-6">
           <Reveal>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gold">Live · omgång {round}</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gold">{round ? `Live · omgång ${round}` : "Live"}</p>
             <h2 className="font-display mt-2 text-5xl md:text-7xl">Tipstabellen</h2>
           </Reveal>
           <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
@@ -232,6 +233,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ r
                   </div>
                 ))}
               </Stagger>
+              {!ranked.length && <p className="px-2 py-6 text-center text-muted">Tipstabellen startar när första omgången är spelad.</p>}
               <Link href="/tipstabell" className="mt-2 flex min-h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-gold hover:bg-surface-3">
                 Hela tipstabellen, grafer och jämförelser <ArrowRight className="size-4" />
               </Link>

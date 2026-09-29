@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui";
 import { fmtDateTime } from "@/lib/format";
 import { TipForm } from "./tip-form";
 import { PaymentWaiting } from "@/components/payment-waiting";
+import { earnedFreeEntry } from "@/lib/free-entry";
 
 export const metadata = { title: "Mitt tips" };
 
@@ -35,6 +36,7 @@ export default async function TipPage({ searchParams }: { searchParams: Promise<
           swish={season.swishNumber}
           paidBy={entry?.paidBy ?? ""}
           context="tips"
+          freeEarned={!entry && (await earnedFreeEntry(user.id, season))}
         />
       </div>
     );

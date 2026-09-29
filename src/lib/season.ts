@@ -3,6 +3,30 @@ import { db } from "./db";
 import { computeErrors, rankEntries, type Ranked, type TeamDiff } from "./scoring";
 import { computeAwards, AWARD_LABEL, type AwardKind } from "./awards";
 import { distributePrizes, lastPlace, parseSplit, prizePool } from "./prizes";
+import { DEMO_USER_WHERE } from "./demo-data";
+
+/** Bekräftad deltagare: betalt eller gratisplats */
+const CONFIRMED = { OR: [{ paymentStatus: "CONFIRMED" }, { freeEntry: true }] };
+
+/**
+ * Riktiga deltagare går alltid före demotippare: så fort en riktig deltagare är bekräftad räknas demotipparna
+ * bort ur tabell, prispott och utmärkelser – även om någon glömt att rensa demodatan.
+ */
+async function demoFilter(seasonId: string) {
+  const real = await db.entry.count({ where: { seasonId, ...CONFIRMED, user: { NOT: DEMO_USER_WHERE } } });
+  return real ? { user: { NOT: DEMO_USER_WHERE } } : {};
+}
+
+/**
+ * Färdigspelad omgång: högsta N där minst alla lag utom två har spelat N matcher. Så räknas en omgång som klar
+ * även om en enstaka match skjutits upp, men inte mitt i en omgång när bara några lag har spelat.
+ */
+export function completedRound(rows: { played: number }[]): number {
+  if (!rows.length) return 0;
+  const need = Math.max(1, rows.length - 2);
+  const sorted = rows.map((r) => r.played).sort((a, b) => b - a);
+  return sorted[need - 1] ?? 0;
+}
 
 /** Cachas per förfrågan: layouten och sidan frågar båda efter säsongen. */
 export const getActiveSeason = cache(async () => {
@@ -51,10 +75,12 @@ export type LeaderboardEntry = Ranked<{
 /** Räknar ut tipstabellen live mot senaste verkliga tabellen. */
 export async function computeLeaderboard(seasonId: string) {
   const snapshot = await getLatestSnapshot(seasonId);
+  // Ingen tabell än (före första omgången): ingen tipstabell – annars skulle alla ligga på 0 fel
+  if (!snapshot) return { snapshot, ranked: [] as LeaderboardEntry[], leaderGoals: 0, leaderAssists: 0 };
   const entries = await db.entry.findMany({
     // Bara bekräftade deltagare (betalt eller gratisplats) är med i tabellen och kan vinna pengar.
     // Återställer Anders en betalning till "väntar" försvinner tipparen alltså ur tabellen tills den är bekräftad igen.
-    where: { seasonId, submittedAt: { not: null }, OR: [{ paymentStatus: "CONFIRMED" }, { freeEntry: true }] },
+    where: { seasonId, submittedAt: { not: null }, ...CONFIRMED, ...(await demoFilter(seasonId)) },
     include: {
       rows: true,
       user: { select: { id: true, name: true, avatar: true, favoriteTeamId: true } },
@@ -67,10 +93,10 @@ export async function computeLeaderboard(seasonId: string) {
   const leaderAssists = Math.max(0, ...players.map((p) => p.assists));
   const actual = new Map(snapshot?.rows.map((r) => [r.teamId, r.position]) ?? []);
 
-  // Föregående uppdatering för pilar upp/ner
+  // Pilar upp/ner jämför med förra färdigspelade omgången – inte med förra timmens synk mitt i en omgång
   const prevSnap = snapshot
     ? await db.standingSnapshot.findFirst({
-        where: { seasonId, OR: [{ round: { lt: snapshot.round } }, { round: snapshot.round, createdAt: { lt: snapshot.createdAt } }] },
+        where: { seasonId, round: { lt: snapshot.round } },
         orderBy: [{ round: "desc" }, { createdAt: "desc" }],
         include: { leaderboard: true },
       })
@@ -108,8 +134,9 @@ export const getLeaderboard = cache((seasonId: string) => computeLeaderboard(sea
 
 export async function computePrizes(seasonId: string) {
   const [season, { ranked }] = await Promise.all([db.season.findUniqueOrThrow({ where: { id: seasonId } }), getLeaderboard(seasonId)]);
+  // Potten = betalande × avgift − avsatt. Gratisplatser (fjolårets sistaplats) har inte betalat och räknas inte in.
   const participants = await db.entry.count({
-    where: { seasonId, OR: [{ paymentStatus: "CONFIRMED" }, { freeEntry: true }] },
+    where: { seasonId, paymentStatus: "CONFIRMED", freeEntry: false, ...(await demoFilter(seasonId)) },
   });
   const pool = prizePool({
     entryFee: season.entryFee,
@@ -140,7 +167,7 @@ type StandingInput = {
  * Anropas både från API-synk och när admin uppdaterar manuellt.
  */
 export async function recordSnapshot(seasonId: string, rows: StandingInput[], source: "API" | "MANUAL" | "SEED") {
-  const round = Math.max(0, ...rows.map((r) => r.played));
+  const round = completedRound(rows);
   const latest = await getLatestSnapshot(seasonId);
   // Hoppa över om inget har ändrats sedan förra (vanligt vid schemalagd synk)
   if (
@@ -176,15 +203,21 @@ export async function recordSnapshot(seasonId: string, rows: StandingInput[], so
     })),
   });
 
-  // Utmärkelser
-  const recent = await db.standingSnapshot.findMany({
-    where: { seasonId },
-    orderBy: [{ round: "desc" }, { createdAt: "desc" }],
-    take: 5,
-    include: { leaderboard: true },
-  });
+  // Utmärkelser: en gång per färdigspelad omgång, mot förra omgångens slutläge (inte mot förra timmens synk)
   const awardsOut: { kind: AwardKind; names: string[]; delta: number }[] = [];
-  if (recent.length >= 2) {
+  const newRound = !latest || round > latest.round;
+  const all = newRound
+    ? await db.standingSnapshot.findMany({
+        where: { seasonId },
+        orderBy: [{ round: "desc" }, { createdAt: "desc" }],
+        include: { leaderboard: true },
+      })
+    : [];
+  // Senaste tabellen per omgång, nyast först (listan är sorterad nyast först, så första träffen per omgång vinner)
+  const perRound = new Map<number, (typeof all)[number]>();
+  for (const x of all) if (!perRound.has(x.round)) perRound.set(x.round, x);
+  const recent = [...perRound.values()].slice(0, 5);
+  if (newRound && recent.length >= 2) {
     const [cur, prev] = recent;
     const history = new Map<string, number[]>();
     for (const s of [...recent].reverse())
@@ -205,6 +238,37 @@ export async function recordSnapshot(seasonId: string, rows: StandingInput[], so
   return { snapshot, changed: true, awards: awardsOut };
 }
 
+/**
+ * Engångsomräkning: tidigare sparades omgång som "flest spelade matcher" (även mitt i en omgång). Nu gäller
+ * färdigspelad omgång. Utan omräkning kunde en gammal tabell ligga kvar som "senaste" för alltid.
+ * Idempotent – körs vid serverstart och gör ingenting andra gången.
+ */
+export async function migrateSnapshotRounds() {
+  const key = "migration:completedRound";
+  if (await db.setting.findUnique({ where: { key } })) return 0;
+  const snaps = await db.standingSnapshot.findMany({ include: { rows: { select: { played: true } } } });
+  let changed = 0;
+  for (const s of snaps) {
+    const r = completedRound(s.rows);
+    if (r !== s.round) {
+      await db.standingSnapshot.update({ where: { id: s.id }, data: { round: r } });
+      changed++;
+    }
+  }
+  // Redan aviserade omgångar: räkna dagens tabell som aviserad, så att uppgraderingen inte skickar en extra notis
+  for (const season of await db.season.findMany({ select: { id: true } })) {
+    const latest = await getLatestSnapshot(season.id);
+    if (latest)
+      await db.setting.upsert({
+        where: { key: `announcedRound:${season.id}` },
+        create: { key: `announcedRound:${season.id}`, value: String(latest.round) },
+        update: {},
+      });
+  }
+  await db.setting.create({ data: { key, value: new Date().toISOString() } });
+  return changed;
+}
+
 export function awardText(a: { kind: AwardKind; names: string[]; delta: number }) {
   const who = a.names.join(" & ");
   if (a.kind === "ROCKET") return `${AWARD_LABEL.ROCKET}: ${who} (+${a.delta} placeringar)`;
@@ -222,7 +286,8 @@ export async function latestAwards(seasonId: string) {
     include: { user: { select: { id: true, name: true, avatar: true } } },
   });
   const byId = new Map(entries.map((e) => [e.id, e.user]));
-  return awards.map((a) => ({ ...a, kind: a.kind as AwardKind, user: byId.get(a.entryId) ?? null }));
+  // Utmärkelser för raderade deltaganden (t.ex. ett raderat konto) visas inte
+  return awards.filter((a) => byId.has(a.entryId)).map((a) => ({ ...a, kind: a.kind as AwardKind, user: byId.get(a.entryId) ?? null }));
 }
 
 /** Rankhistorik per entry för grafer. */

@@ -8,9 +8,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { apiUser } from "@/lib/auth";
-import { getActiveSeason, getSeasonTeams, recordSnapshot } from "@/lib/season";
+import { computePrizes, getActiveSeason, getSeasonTeams, recordSnapshot } from "@/lib/season";
 import { sendNotification, type Audience, type NotificationType } from "@/lib/notify";
-import { announceUpdate, syncFromApi, syncPhotosFromApiFootball, syncSquads, testApiFootball } from "@/lib/football-api";
+import { clearDemoData as clearDemo, loadDemoData as loadDemo } from "@/lib/demo-data";
+import { applyStandings, syncFromApi, syncPhotosFromApiFootball, syncSquads, testApiFootball } from "@/lib/football-api";
 import { fillPlayerPhotos } from "@/lib/espn";
 import { oddsApiEnabled, syncOdds } from "@/lib/odds";
 import { isSafeDataImage, isSafeUrl } from "@/lib/security";
@@ -82,7 +83,23 @@ export async function saveSeason(input: z.input<typeof seasonSchema>): Promise<R
         update: {},
       });
   }
-  return done(id ? "Tävlingen är uppdaterad." : `${d.name} är skapad.`);
+  if (id) return done("Tävlingen är uppdaterad.");
+  const active = await db.season.findFirst({ where: { isActive: true, NOT: { id: season.id } } });
+  let extra = "";
+  if (!active || active.isFinished) {
+    await db.$transaction([db.season.updateMany({ data: { isActive: false } }), db.season.update({ where: { id: season.id }, data: { isActive: true } })]);
+    extra = " Den är nu aktiv.";
+    // Spelare att välja som skytteligavinnare/assistkung redan innan serien startar
+    try {
+      const sq = await syncSquads(season.id);
+      const { applyPlayerPhotos } = await import("@/lib/player-photo-archive");
+      await applyPlayerPhotos(db);
+      extra += ` ${sq.players} spelare hämtade från ${sq.teams} lag.`;
+    } catch (e) {
+      extra += ` Trupperna kunde inte hämtas nu (${(e as Error).message.slice(0, 80)}) – de hämtas automatiskt inom ett dygn.`;
+    }
+  } else extra = ` Gör den aktiv när ${active.name} är avslutad.`;
+  return done(`${d.name} är skapad.${extra}`, "/");
 }
 
 export async function activateSeason(id: string): Promise<Result> {
@@ -93,8 +110,24 @@ export async function activateSeason(id: string): Promise<Result> {
 
 export async function finishSeason(id: string, finished: boolean): Promise<Result> {
   await admin();
-  await db.season.update({ where: { id }, data: { isFinished: finished } });
-  return done(finished ? "Säsongen är avslutad." : "Säsongen är öppnad igen.", "/");
+  const season = await db.season.update({ where: { id }, data: { isFinished: finished } });
+  if (finished) {
+    const key = `finishedAnnounced:${id}`;
+    if (!(await db.setting.findUnique({ where: { key } }))) {
+      const { payouts, ranked } = await computePrizes(id);
+      const nameOf = new Map(ranked.map((r) => [r.id, r.user.name]));
+      const lines = payouts.map((p) => `${p.rank}:a ${nameOf.get(p.id) ?? "?"} – ${p.amount} kr${p.shared > 1 ? " (delad)" : ""}`);
+      await sendNotification({
+        type: "RESULTS",
+        title: `${season.name} är avgjort! 🏆`,
+        body: lines.length ? lines.join("\n") : "Slutställningen är klar.",
+        link: "/tipstabell",
+        seasonId: id,
+      });
+      await db.setting.create({ data: { key, value: new Date().toISOString() } });
+    }
+  }
+  return done(finished ? "Säsongen är avslutad och alla har fått veta vem som vann." : "Säsongen är öppnad igen.", "/");
 }
 
 // ─── Lag ──────────────────────────────────────────────────────────────────
@@ -185,13 +218,14 @@ export async function saveStandings(input: { rows: z.input<typeof rowSchema>[]; 
   const ids = new Set(rows.data.map((r) => r.teamId));
   if (rows.data.length !== teams.length || ids.size !== teams.length || !teams.every((t) => ids.has(t.id)))
     return { ok: false, error: "Alla lag måste finnas med exakt en gång." };
-  const result = await recordSnapshot(
+  const result = await applyStandings(
     season.id,
-    rows.data.map((r, i) => ({ ...r, position: i + 1 })),
+    rows.data.map((r, i) => ({ ...r, position: i + 1, form: "" })),
     "MANUAL",
+    input.notify,
   );
-  if (input.notify) await announceUpdate(season.id, result.snapshot.round, result.awards);
-  return done(`Tabellen efter omgång ${result.snapshot.round} är sparad och tipstabellen omräknad.`, "/");
+  if (!result.recorded) return { ok: false, error: `${result.message}. Fyll i spelade matcher per lag.` };
+  return done(`${result.message}. Tipstabellen är omräknad.`, "/");
 }
 
 // ─── Deltagare ────────────────────────────────────────────────────────────
@@ -435,35 +469,16 @@ export async function sendDeadlineReminder(): Promise<Result> {
 
 /** Tar bort demodata från seeden – behåller lag, säsonger, admin, Hall of Fame och historik */
 export async function clearDemoData(): Promise<Result> {
-  const me = await admin();
-  // Endast i demoläge – rör aldrig riktiga användare som registrerat sig själva
-  if ((await db.setting.findUnique({ where: { key: "demoData" } }))?.value !== "true") return { ok: false, error: "Ingen demodata finns." };
-  const demoUsers = { email: { endsWith: "@allsvenskantipset.se" } };
-  let demoPlayerIds: string[] = [];
-  try {
-    const raw = (await db.setting.findUnique({ where: { key: "demoPlayerIds" } }))?.value;
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    if (Array.isArray(parsed)) demoPlayerIds = parsed.filter((x): x is string => typeof x === "string");
-  } catch {
-    // trasig lista = rör inga spelare
-  }
+  await admin();
+  const r = await clearDemo(db);
+  return r.ok ? done(r.message, "/") : { ok: false, error: r.error };
+}
+
+/** Läser in demodata igen. Vägrar om riktiga deltagare finns – då blandas aldrig påhittade tips med riktiga. */
+export async function loadDemoData(): Promise<Result> {
+  await admin();
   const season = await getActiveSeason();
-  const latest = season
-    ? await db.standingSnapshot.findFirst({ where: { seasonId: season.id }, orderBy: [{ round: "desc" }, { createdAt: "desc" }] })
-    : null;
-  await db.$transaction([
-    // Demotippare (kaskad: tips, chatt, följningar). Adminkontot behålls men dess demotips tas bort.
-    db.entry.deleteMany({ where: { user: demoUsers } }),
-    db.chatMessage.deleteMany({ where: { user: demoUsers } }),
-    db.user.deleteMany({ where: { ...demoUsers, id: { not: me.id }, role: { not: "ADMIN" } } }),
-    db.oddsQuote.deleteMany({ where: { source: "SEED" } }),
-    // Syntetisk tabellhistorik – senaste (riktiga) tabellen behålls
-    db.standingSnapshot.deleteMany({ where: { source: "SEED", ...(latest ? { id: { not: latest.id } } : {}) } }),
-    ...(latest ? [db.standingSnapshot.update({ where: { id: latest.id }, data: { source: "MANUAL" } })] : []),
-    // Bara de påhittade spelarna som seed-skriptet skapade (och som ingen längre har tippat). Spelare från ESPN,
-    // API-Football eller som Anders lagt in för hand rörs aldrig.
-    db.player.deleteMany({ where: { id: { in: demoPlayerIds }, scorerTips: { none: {} }, assistTips: { none: {} } } }),
-    db.setting.deleteMany({ where: { key: { in: ["demoData", "demoPlayerIds"] } } }),
-  ]);
-  return done("Demodata är borttagen. Aktuell tabell, Hall of Fame och historik finns kvar.", "/");
+  if (!season) return { ok: false, error: "Ingen aktiv säsong" };
+  const r = await loadDemo(db, season.id, { recordSnapshot, production: process.env.NODE_ENV === "production" });
+  return r.ok ? done(r.message, "/") : { ok: false, error: r.error };
 }

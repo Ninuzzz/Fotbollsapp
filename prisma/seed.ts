@@ -11,28 +11,16 @@
  */
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { TEAMS_2026, TEAMS_EARLIER } from "../src/lib/teams-data";
 import { recordSnapshot } from "../src/lib/season";
-import { applyPlayerPhotos } from "./apply-player-photos";
-import { espnLeaders, espnStandings, fillPlayerPhotos } from "../src/lib/espn";
+import { applyPlayerPhotos } from "../src/lib/player-photo-archive";
+import { loadDemoData } from "../src/lib/demo-data";
+import { espnLeaders, espnSquads, espnStandings, fillPlayerPhotos } from "../src/lib/espn";
 
 const db = new PrismaClient();
 
-// Deterministisk slump så att seeden blir likadan varje gång
-function rng(seed: number) {
-  return () => {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-const rand = rng(2026);
-const pick = <T,>(a: T[]) => a[Math.floor(rand() * a.length)];
 
 // Tabell efter omgång 22, 2026 (från allsvenskan-skärmdump)
 const TABLE_2026: [string, number, number, number, number, number, number, string][] = [
@@ -84,14 +72,7 @@ const PLAYERS: [string, string, number, number][] = [
   ["Nils Ahlgren", "Halmstad BK", 4, 3],
 ];
 
-const DEMO_NAMES = [
-  "Kristina Holm", "Peder Lundell", "Maja Ekström", "Göran Falk", "Sara Nyqvist", "Tobias Dahl",
-  "Elin Sandberg", "Rasmus Hedin", "Lotta Wikström", "Jonas Berglund", "Annika Sjöberg", "Mikael Rönn",
-  "Frida Almqvist", "Olle Stenberg", "Karin Lindh", "Patrik Engström", "Hanna Borg", "Fredrik Lund",
-  "Emma Östlund", "Daniel Söder", "Ingrid Malm",
-];
 
-const AVATAR_PATTERNS = ["solid", "stripes", "hoops", "halves", "sash"];
 
 async function main() {
   // Seeden raderar ALLT. I drift får den bara köras mot en tom databas (eller med SEED_FORCE=true).
@@ -139,14 +120,16 @@ async function main() {
 
   // Riktiga spelare + logotyper från ESPN om nätet finns, annars demolista
   let players: Awaited<ReturnType<typeof db.player.findMany>> = [];
+  let tableRows: Parameters<typeof recordSnapshot>[1] | null = null;
   try {
-    console.log("Hämtar logotyper, skytteliga och assistliga från ESPN …");
-    await espnStandings(season.id, 2026);
-    await espnLeaders(season.id);
-    if (!process.env.SEED_NO_PHOTOS) console.log("Foton:", await fillPlayerPhotos(season.id, 30));
+    console.log("Hämtar logotyper, tabell, skytteliga och assistliga från ESPN …");
+    tableRows = (await espnStandings(season.id, 2026)).rows;
+    await espnLeaders(season.id, 2026);
+    // Hela trupperna, så att alla spelare (och deras sparade foton) finns från start
+    console.log("Trupper:", await espnSquads(season.id).catch((e) => `ej nåbart (${(e as Error).message})`));
     players = await db.player.findMany({ where: { seasonId: season.id } });
   } catch (e) {
-    console.log("ESPN ej nåbart – använder demospelare.", (e as Error).message);
+    console.log("ESPN ej nåbart – använder sparad tabell och demospelare.", (e as Error).message);
   }
   if (players.length < 10) {
     console.log("Spelare (demo-statistik) …");
@@ -158,8 +141,16 @@ async function main() {
     await db.setting.create({ data: { key: "demoPlayerIds", value: JSON.stringify(demoPlayers.map((p) => p.id)) } });
   }
 
-  // Sparade spelarfoton från repot (public/players) – så att en ny installation får bilderna direkt
-  console.log("Spelarfoton:", await applyPlayerPhotos(db));
+  // Sparade spelarfoton från repot (public/players) först, TheSportsDB för resten
+  console.log("Spelarfoton (arkiv):", await applyPlayerPhotos(db));
+  if (!process.env.SEED_NO_PHOTOS) console.log("Spelarfoton (TheSportsDB):", await fillPlayerPhotos(season.id, 30).catch(() => "ej nåbart"));
+
+  // Aktuell tabell (riktig): från ESPN, annars den sparade efter omgång 22
+  if (!tableRows || !tableRows.some((r) => r.played > 0))
+    tableRows = TABLE_2026.map(([name, w, d, l, gf, ga, pts, form], i) => ({
+      teamId: T(name), position: i + 1, played: 22, won: w, drawn: d, lost: l, goalsFor: gf, goalsAgainst: ga, points: pts, form,
+    }));
+  await recordSnapshot(season.id, tableRows, "MANUAL");
 
   console.log("Användare …");
   // I drift får inga kända standardlösenord finnas: adminlösenordet måste anges, demokontona får slumpade lösenord
@@ -167,102 +158,17 @@ async function main() {
   const adminPw = process.env.SEED_ADMIN_PASSWORD ?? (prod ? "" : "anders2026");
   if (prod && adminPw.length < 12) throw new Error("Sätt SEED_ADMIN_PASSWORD (minst 12 tecken) innan du seedar i drift.");
   const adminHash = await bcrypt.hash(adminPw, 11);
-  const demoHash = await bcrypt.hash(prod ? randomBytes(24).toString("base64url") : "tipset2026", 11);
   const admin = await db.user.create({
     data: { email: "anders@allsvenskantipset.se", name: "Anders", role: "ADMIN", passwordHash: adminHash, favoriteTeamId: T("Malmö FF"), avatar: "jersey:stripes:#38bdf8:#ffffff:1" },
   });
-  const demo = await db.user.create({
-    data: { email: "demo@allsvenskantipset.se", name: "Demo Tippare", passwordHash: demoHash, favoriteTeamId: T("Hammarby IF"), avatar: "jersey:hoops:#16a34a:#ffffff:9" },
-  });
-  const users = [admin, demo];
-  for (const [i, name] of DEMO_NAMES.entries()) {
-    const team = pick(TEAMS_2026);
-    users.push(
-      await db.user.create({
-        data: {
-          email: `demo${i + 1}@allsvenskantipset.se`, name, passwordHash: demoHash, favoriteTeamId: T(team.name),
-          avatar: `jersey:${pick(AVATAR_PATTERNS)}:${team.primaryColor}:${team.secondaryColor}:${1 + Math.floor(rand() * 23)}`,
-        },
-      }),
-    );
-  }
+  void admin;
 
-  const books = ["Unibet", "Svenska Spel", "Bet365"];
-  const base: Record<string, number> = {
-    "Malmö FF": 2.6, "Hammarby IF": 4.5, "Djurgårdens IF": 4.8, "BK Häcken": 7, "AIK": 9, "IF Elfsborg": 12, "Mjällby AIF": 15,
-    "IFK Göteborg": 17, "GAIS": 21, "IK Sirius": 34, "IF Brommapojkarna": 41, "Kalmar FF": 67, "Västerås SK": 81,
-    "Degerfors IF": 101, "Halmstad BK": 126, "Örgryte IS": 151,
-  };
-  console.log("Tips (demo) …");
-  // Tips = försäsongsförväntning (oddsordning) + slumpmässiga förskjutningar
-  const actualOrder = Object.entries(base).sort((a, b) => a[1] - b[1]).map(([n]) => n);
-  for (const [i, u] of users.entries()) {
-    const noise = 1.5 + rand() * 5;
-    const order = [...actualOrder]
-      .map((name, pos) => ({ name, key: pos + (rand() - 0.5) * noise * 2 }))
-      .sort((a, b) => a.key - b.key)
-      .map((x) => x.name);
-    const scorer = pick(players.filter((p) => p.goals >= 6));
-    const assist = pick(players.filter((p) => p.assists >= 5));
-    const status = i % 9 === 4 ? "CLAIMED" : "CONFIRMED";
-    await db.entry.create({
-      data: {
-        userId: u.id, seasonId: season.id, paymentStatus: status, paidAt: status === "CONFIRMED" ? new Date("2026-03-20") : null,
-        paidBy: i % 7 === 3 ? "M.L." : null, topScorerId: scorer.id, topAssistId: assist.id,
-        submittedAt: new Date("2026-03-25"), freeEntry: i === 5,
-        rows: { create: order.map((name, idx) => ({ position: idx + 1, teamId: T(name) })) },
-      },
-    });
-  }
-
-  console.log("Tabellhistorik omgång 1–22 (syntetisk demo fram till 22, omgång 22 är riktig) …");
-  const scale = new Map(players.map((p) => [p.id, { g: p.goals, a: p.assists }]));
-  for (let round = 2; round <= 22; round += 1) {
-    // Spelarstatistiken växer linjärt fram till dagens siffror
-    for (const p of players) {
-      const s = scale.get(p.id)!;
-      await db.player.update({ where: { id: p.id }, data: { goals: Math.round((s.g * round) / 22), assists: Math.round((s.a * round) / 22) } });
-    }
-    const f = round / 22;
-    const rows = TABLE_2026.map(([name, w, d, l, gf, ga, pts, form]) => ({
-      name, w, d, l, gf, ga, form,
-      pts: round === 22 ? pts : Math.max(0, Math.round(pts * f + (rand() - 0.5) * 8)),
-    }))
-      .sort((a, b) => b.pts - a.pts || b.gf - b.ga - (a.gf - a.ga))
-      .map((r, idx) => ({
-        teamId: T(r.name), position: idx + 1, played: round,
-        won: Math.round(r.w * f), drawn: Math.round(r.d * f), lost: Math.round(r.l * f),
-        goalsFor: Math.round(r.gf * f), goalsAgainst: Math.round(r.ga * f), points: r.pts, form: round === 22 ? r.form : "",
-      }));
-    await recordSnapshot(season.id, rows, "SEED");
-  }
-
-  console.log("Chatt, notiser, odds …");
-  const chat = [
-    [2, "Sirius på topp efter 22 omgångar, vem hade det i sitt tips? 😅"],
-    [5, "Inte jag. Jag hade dem på 11:e plats…"],
-    [0, "Välkomna till årets tips! Tabellen uppdateras automatiskt efter varje omgång. ⚽"],
-    [8, "Min skytteligavinnare har två mål på fem matcher. Det blir tufft i utslagsfrågan."],
-    [3, "Hammarby kommer att ta det här, jag lovar 💚🤍"],
-    [11, "Veckans raket igen! 🚀"],
-  ] as const;
-  for (const [i, [u, body]] of chat.entries())
-    await db.chatMessage.create({ data: { seasonId: season.id, userId: users[u].id, body, createdAt: new Date(Date.now() - (chat.length - i) * 3.6e6) } });
-
+  console.log("Demodata …");
+  const demo = await loadDemoData(db, season.id, { recordSnapshot, production: prod });
+  console.log(demo.ok ? demo.message : `Ingen demodata: ${demo.error}`);
   await db.notification.createMany({
-    data: [
-      { type: "GENERAL", title: "Välkommen till Allsvenskantipset 2026!", body: "Nu är årets tips igång. Lycka till allihop. /Anders", authorId: admin.id, createdAt: new Date("2026-04-04T10:00:00+02:00") },
-      { type: "DEADLINE", title: "2 dagar kvar att tippa!", body: "Sista dag att lämna in eller ändra ditt tips är 3 april.", audience: "MISSING_TIPS", createdAt: new Date("2026-04-01T09:00:00+02:00") },
-      { type: "NEWS", title: "Sommaruppehållet är över", body: "Allsvenskan drar igång igen i helgen. Tipstabellen uppdateras efter varje omgång.", authorId: admin.id, createdAt: new Date("2026-07-10T12:00:00+02:00") },
-    ],
+    data: [{ type: "GENERAL", title: `Välkommen till ${season.name}!`, body: "Nu är årets tips igång. Lycka till allihop. /Anders", authorId: admin.id }],
   });
-
-  // Exempelodds (markeras som exempeldata i UI – ersätts av API eller admin)
-  for (const b of books)
-    for (const [team, o] of Object.entries(base))
-      await db.oddsQuote.create({
-        data: { seasonId: season.id, teamId: T(team), bookmaker: b, market: "WINNER", odds: Math.round(o * (0.92 + rand() * 0.16) * 100) / 100, source: "SEED" },
-      });
 
   console.log("Hall of Fame + historik …");
   const heroes: [number, string, string, string][] = [
@@ -292,8 +198,7 @@ async function main() {
       data: { year: 2024, name: r.name, rank: r.rank, errors: r.errors, exact: r.exact, scorerGoals: r.scorerGoals, rankHistory: JSON.stringify(r.rankHistory) },
     });
 
-  await db.setting.create({ data: { key: "demoData", value: "true" } });
-  console.log(`Klart! ${users.length} användare, ${players.length} spelare, ${hist.results.length} historiska resultat.`);
+  console.log(`Klart! ${await db.user.count()} användare, ${await db.player.count()} spelare, ${hist.results.length} historiska resultat.`);
 }
 
 main()

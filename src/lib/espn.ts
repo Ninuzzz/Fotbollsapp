@@ -44,8 +44,9 @@ export async function espnStandings(seasonId: string, year: number) {
   const log: string[] = [];
   const d = await get<EspnStandings>(`/v2/sports/soccer/${LEAGUE}/standings?season=${year}`);
   const st = d.children?.[0]?.standings;
-  if (!st) throw new Error("ESPN: ingen tabell i svaret");
-  if (st.season && st.season !== year) log.push(`Obs: ESPN returnerade säsong ${st.season}`);
+  if (!st) throw new Error(`ESPN har ingen tabell för ${year} än – serien har troligen inte startat`);
+  // Aldrig förra årets tabell: den skulle räknas mot årets tips och skicka notiser om "omgång 30" mitt i tippningen
+  if (st.season && st.season !== year) throw new Error(`ESPN visar säsong ${st.season}, inte ${year} – serien har inte startat än`);
   const rows: StandingRowInput[] = [];
   for (const e of st.entries) {
     const team = teams.find((t) => t.espnId === Number(e.team.id)) ?? matchTeam(e.team.displayName, teams);
@@ -75,9 +76,13 @@ export async function espnStandings(seasonId: string, year: number) {
 }
 
 /** Uppdaterar mål och assist för alla spelare i ESPN:s topplistor (upp till 50 per lista). */
-export async function espnLeaders(seasonId: string) {
+export async function espnLeaders(seasonId: string, year?: number) {
   const teams = await getSeasonTeams(seasonId);
   const d = await get<EspnStats>(`/site/v2/sports/soccer/${LEAGUE}/statistics`);
+  // Skytteligan saknar årsparameter hos ESPN. Gäller den ett annat år (t.ex. förra säsongen före seriestart)
+  // skulle årets spelare få fjolårets mål – då rör vi ingenting.
+  const statsYear = (d as { season?: { year?: number } }).season?.year;
+  if (year && statsYear && statsYear !== year) return 0;
   const seen = new Map<string, { name: string; team: EspnTeam | undefined; goals: number; assists: number }>();
   for (const list of d.stats ?? []) {
     for (const l of list.leaders ?? []) {
@@ -111,7 +116,34 @@ export async function espnLeaders(seasonId: string) {
 }
 
 /** Hämtar trupper (utespelare) så att det finns spelare att tippa inför säsongen. */
+/**
+ * Kopplar tävlingens lag till ESPN via ligans laglista. Fungerar även före seriestart (då finns ingen tabell),
+ * så att nyuppflyttade lag får id och logotyp – och trupperna kan hämtas innan folk ska tippa.
+ */
+export async function linkEspnTeams(seasonId: string) {
+  const teams = await getSeasonTeams(seasonId);
+  const d = await get<{ sports?: { leagues?: { teams?: { team: EspnTeam & { logos?: { href: string; rel: string[] }[] } }[] }[] }[] }>(
+    `/site/v2/sports/soccer/${LEAGUE}/teams`,
+  );
+  const list = d.sports?.[0]?.leagues?.[0]?.teams?.map((x) => x.team) ?? [];
+  let linked = 0;
+  const missing: string[] = [];
+  for (const t of teams) {
+    if (t.espnId) continue;
+    const hit = list.find((e) => matchTeam(e.displayName, [t]));
+    if (!hit) {
+      missing.push(t.name);
+      continue;
+    }
+    const logo = hit.logos?.find((l) => l.rel.includes("dark"))?.href ?? hit.logos?.[0]?.href ?? null;
+    await db.team.update({ where: { id: t.id }, data: { espnId: Number(hit.id), logoUrl: t.logoUrl ?? logo } });
+    linked++;
+  }
+  return { linked, missing };
+}
+
 export async function espnSquads(seasonId: string) {
+  await linkEspnTeams(seasonId).catch(() => null);
   const teams = (await getSeasonTeams(seasonId)).filter((t) => t.espnId);
   let count = 0;
   for (const t of teams) {

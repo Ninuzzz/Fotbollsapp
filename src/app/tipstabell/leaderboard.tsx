@@ -126,6 +126,13 @@ export function Leaderboard({
             </tr>
           </thead>
           <tbody>
+            {!entries.length && (
+              <tr>
+                <td colSpan={9} className="px-4 py-10 text-center text-muted">
+                  Tipstabellen visas när första omgången är spelad. Fram till dess är allas tips hemliga.
+                </td>
+              </tr>
+            )}
             {shown.map((e, i) => {
               const isMe = e.userId === me;
               const fol = optimisticFollowing.includes(e.userId);

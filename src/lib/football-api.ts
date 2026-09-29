@@ -9,7 +9,7 @@
  */
 import { db } from "./db";
 import { matchTeam } from "./teams-data";
-import { recordSnapshot, getSeasonTeams, awardText } from "./season";
+import { recordSnapshot, getSeasonTeams, awardText, migrateSnapshotRounds } from "./season";
 import { sendNotification } from "./notify";
 import { espnLeaders, espnSquads, espnStandings, fillPlayerPhotos, type StandingRowInput } from "./espn";
 
@@ -116,14 +116,16 @@ export async function syncFromApi(seasonId: string) {
         log.push(...r.log);
         rows = r.rows;
       } else {
-        // Spelarstatistik först, så att tie-breakers räknas på färska siffror
-        const n = await espnLeaders(seasonId);
-        log.push(`ESPN: ${n} spelare i skytte-/assistligan uppdaterade`);
+        // Tabellen först: gäller den inte årets säsong kastar espnStandings, och då rörs inte heller skytteligan
         const r = await espnStandings(seasonId, season.year);
         log.push(...r.log);
         rows = r.rows;
+        if (rows.some((x) => x.played > 0)) {
+          const n = await espnLeaders(seasonId, season.year);
+          log.push(`ESPN: ${n} spelare i skytte-/assistligan uppdaterade`);
+        }
       }
-      if (rows.length !== teamCount) throw new Error(`Tabellen innehöll ${rows.length} av ${teamCount} lag`);
+      if (rows.length !== teamCount) throw new Error(`Tabellen innehöll ${rows.length} av ${teamCount} lag – kontrollera lagen under Admin → Lag`);
       used = provider;
       break;
     } catch (e) {
@@ -131,20 +133,63 @@ export async function syncFromApi(seasonId: string) {
       rows = null;
     }
   }
-  if (!rows || !used) return { ok: false, log };
+  const stamp = (ok: boolean) =>
+    db.setting.upsert({
+      where: { key: "lastSync" },
+      create: { key: "lastSync", value: JSON.stringify({ at: new Date().toISOString(), provider: used, ok, log: log.slice(-4) }) },
+      update: { value: JSON.stringify({ at: new Date().toISOString(), provider: used, ok, log: log.slice(-4) }) },
+    });
+  if (!rows || !used) {
+    await stamp(false);
+    return { ok: false, log };
+  }
 
   const photos = await fillPlayerPhotos(seasonId).catch(() => ({ checked: 0, found: 0 }));
   if (photos.checked) log.push(`Foton: ${photos.found} av ${photos.checked} hittade`);
 
-  const result = await recordSnapshot(seasonId, rows, "API");
-  log.push(result.changed ? `Ny tabell sparad från ${used} (omgång ${result.snapshot.round})` : "Tabellen oförändrad sedan förra synken");
-  if (result.changed) await announceUpdate(seasonId, result.snapshot.round, result.awards);
-  await db.setting.upsert({
-    where: { key: "lastSync" },
-    create: { key: "lastSync", value: JSON.stringify({ at: new Date().toISOString(), provider: used }) },
-    update: { value: JSON.stringify({ at: new Date().toISOString(), provider: used }) },
-  });
+  const r = await applyStandings(seasonId, rows, "API");
+  log.push(r.message);
+  await stamp(true);
   return { ok: true, log };
+}
+
+/**
+ * Sparar en ny tabell och bestämmer vilka notiser som ska ut. Samma regler för synk och manuell uppdatering:
+ *  - ingen tabell alls innan någon match är spelad (annars "omgång 0" till alla)
+ *  - en notis per FÄRDIGSPELAD omgång – inte en per timme när helgens matcher spelas
+ *  - admin får en påminnelse en gång när sista omgången är spelad
+ * `notify` (manuell uppdatering): admin väljer själv, men en omgång aviseras ändå aldrig två gånger.
+ */
+export async function applyStandings(seasonId: string, rows: StandingRowInput[], source: "API" | "MANUAL", notify = true) {
+  if (!rows.some((r) => r.played > 0)) return { recorded: false, announced: false, message: "Serien har inte startat – ingen tabell sparad" };
+  await migrateSnapshotRounds();
+  const season = await db.season.findUniqueOrThrow({ where: { id: seasonId } });
+  const result = await recordSnapshot(seasonId, rows, source);
+  if (!result.changed) return { recorded: false, announced: false, message: "Tabellen oförändrad sedan förra synken" };
+  const round = result.snapshot.round;
+
+  const key = `announcedRound:${seasonId}`;
+  const last = Number((await db.setting.findUnique({ where: { key } }))?.value ?? 0);
+  let announced = false;
+  if (notify && round > 0 && round > last) {
+    await announceUpdate(seasonId, round, result.awards);
+    await db.setting.upsert({ where: { key }, create: { key, value: String(round) }, update: { value: String(round) } });
+    announced = true;
+  }
+
+  const doneKey = `seasonComplete:${seasonId}`;
+  if (round >= season.totalRounds && !season.isFinished && !(await db.setting.findUnique({ where: { key: doneKey } }))) {
+    await sendNotification({
+      type: "GENERAL",
+      audience: "ADMIN",
+      title: "Sista omgången är spelad 🏁",
+      body: "Kontrollera slutställningen och tryck Avsluta säsong under Admin → Tävlingar. Då får alla veta vem som vann.",
+      link: "/admin/tavlingar",
+      seasonId,
+    });
+    await db.setting.create({ data: { key: doneKey, value: new Date().toISOString() } });
+  }
+  return { recorded: true, announced, message: `Ny tabell sparad (omgång ${round})${announced ? " – notis skickad" : ""}` };
 }
 
 /** Skickar notiser efter en uppdatering: resultat + veckans utmärkelser. */
@@ -167,7 +212,6 @@ export async function announceUpdate(seasonId: string, round: number, awards: Pa
   }
 }
 
-/** Trupper, så att det finns spelare att välja som skytt/assistkung inför säsongen. */
 /**
  * Spelarfoton från API-Football. Trupplistan (/players/squads) tar inget säsongsargument och fungerar därför
  * på gratisplanen, med foto på varje spelare. Kostar 16 anrop (ett per lag) + högst 2 första gången för att
@@ -236,12 +280,8 @@ export async function syncPhotosFromApiFootball(seasonId: string) {
   return { teams: teams.length, found, log };
 }
 
+/** Trupper, så att det finns spelare att välja som skytt/assistkung. Lagen kopplas via ESPN:s laglista (fungerar före seriestart). */
 export async function syncSquads(seasonId: string) {
-  const teams = await getSeasonTeams(seasonId);
-  if (!teams.some((t) => t.espnId)) {
-    const season = await db.season.findUniqueOrThrow({ where: { id: seasonId } });
-    await espnStandings(seasonId, season.year); // kopplar ESPN-id till lagen
-  }
   return espnSquads(seasonId);
 }
 

@@ -28,6 +28,8 @@ model User {
   notifyAwards   Boolean  @default(true)
   notifyChat     Boolean  @default(false)
   privacyAcceptedAt DateTime? // när användaren godkände integritetspolicyn
+  // Påhittad demotippare. Rensas med "Rensa demodata" och räknas aldrig med när riktiga deltagare finns.
+  isDemo         Boolean  @default(false)
   createdAt      DateTime @default(now())
 
   sessions      Session[]

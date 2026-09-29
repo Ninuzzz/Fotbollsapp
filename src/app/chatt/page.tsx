@@ -4,6 +4,7 @@ import { getActiveSeason } from "@/lib/season";
 import { canChat } from "@/lib/chat-access";
 import { PageHeader } from "@/components/ui";
 import { PaymentWaiting } from "@/components/payment-waiting";
+import { earnedFreeEntry } from "@/lib/free-entry";
 import { Chat } from "./chat";
 
 export const metadata = { title: "Chatt" };
@@ -28,6 +29,7 @@ export default async function ChatPage() {
           swish={season.swishNumber}
           paidBy={entry?.paidBy ?? ""}
           context="chatt"
+          freeEarned={!entry && (await earnedFreeEntry(user.id, season))}
         />
       )}
     </div>
