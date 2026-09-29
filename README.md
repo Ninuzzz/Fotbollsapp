@@ -97,12 +97,53 @@ Swish Handel-API (automatisk avprickning) kräver företagsavtal och kostar per 
 - Cron-endpointen kräver `CRON_SECRET` (minst 16 tecken) och jämförs i konstant tid.
 - `npm audit`: 0 sårbarheter (postcss och deepmerge-ts är lyfta via `overrides`).
 
-## Driftsättning (t.ex. Fly.io)
+## Driftsätt din egen kopia på Fly.io
 
-1. `fly launch` → lägg SQLite på en volym: `DATABASE_URL="file:/data/tipset.db"`.
-2. `fly secrets set` för alla värden i `.env.example`. Generera nya VAPID-nycklar med `npm run vapid` och en lång `CRON_SECRET`.
-3. `npx prisma db push && npm run db:seed` första gången. Rensa sedan demodata i Admin → Översikt.
-4. Lägg upp cron-anropen ovan, t.ex. som schemalagd GitHub Action eller Fly Machine.
+Allt som behövs finns i repot: `Dockerfile`, `fly.toml`, spelarfoton (`public/players`) och vinnarbilder (`private/heroes`). Räkna med ungefär 30 minuter första gången och 3–5 dollar i månaden.
+
+**Förberedelser (en gång):** installera [Node.js 22](https://nodejs.org), [Git](https://git-scm.com) och [flyctl](https://fly.io/docs/flyctl/install/), och skapa ett konto på fly.io.
+
+1. **Klona och testa lokalt**
+   ```bash
+   git clone https://github.com/Ninuzzz/Fotbollsapp.git
+   cd Fotbollsapp
+   npm install
+   cp .env.example .env
+   npx prisma db push
+   npm run db:seed
+   npm run dev
+   ```
+   Öppna http://localhost:3000 och logga in som `anders@allsvenskantipset.se` (lokalt lösenord: se `prisma/seed.ts`).
+2. **Välj ett eget appnamn.** Namn hos Fly är unika, så byt `app = "allsvenskantipset"` i `fly.toml` till t.ex. `app = "tipset-anders"`. Sajten hamnar på `https://<appnamn>.fly.dev`.
+3. **Skapa appen och disken för databasen**
+   ```bash
+   fly auth login
+   fly apps create tipset-anders
+   fly volumes create tipset_data --region arn --size 1 --app tipset-anders
+   ```
+4. **Egna nycklar för pushnotiser.** Kör `npm run vapid`. Lägg den publika nyckeln (`publicKey`) i `fly.toml` under `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, och resten som hemligheter (skriv in dem själv i terminalen):
+   ```bash
+   fly secrets set VAPID_PRIVATE_KEY=<privateKey> CRON_SECRET=<lång slumpsträng> VAPID_SUBJECT=mailto:<din e-post> SEED_ADMIN_PASSWORD=<minst 12 tecken> --app tipset-anders
+   ```
+   Valfritt, för fler spelarfoton: `fly secrets set FOOTBALL_PROVIDER=api-football API_FOOTBALL_KEY=<nyckel> --app tipset-anders`.
+5. **Deploya** (bygget sker hos Fly, ungefär 4 minuter):
+   ```bash
+   fly deploy --app tipset-anders
+   ```
+6. **Fyll databasen** – en gång, när deployen är klar:
+   ```bash
+   fly ssh console --app tipset-anders -C "npx tsx prisma/seed.ts"
+   ```
+   Seeden vägrar köra om databasen redan har användare, så den kan inte radera riktig data av misstag.
+7. **Logga in** på `https://<appnamn>.fly.dev/logga-in` med lösenordet från `SEED_ADMIN_PASSWORD`, byt det under Profil, och följ checklistan i [docs/Guide-for-Anders.pdf](docs/Guide-for-Anders.pdf). Ta sedan bort startlösenordet: `fly secrets unset SEED_ADMIN_PASSWORD --app tipset-anders`.
+
+**Göra egna ändringar:** ändra koden, testa med `npm run dev` och `npm test`, och kör `fly deploy` igen. Databasen ligger på disken och påverkas inte av nya deployer. Schemaändringar i `prisma/schema.prisma` förs in automatiskt vid start (ändringar som skulle radera data vägras).
+
+**Bra att veta om driften**
+- Tabell, ligor och nyheter hämtas varje timme av en inbyggd schemaläggare – inga cron-jobb behövs.
+- Fly tar dagliga ögonblicksbilder av disken (backup). Återställ: `fly volumes snapshots list`.
+- Loggar: `fly logs --app tipset-anders`. Starta om: `fly apps restart tipset-anders`.
+- Spelarfotona i repot kopplas in automatiskt av seeden. Efter att trupper hämtats om: `fly ssh console -C "npm run photos:apply"`.
 
 För större drift: byt `provider` till `postgresql` i `prisma/schema.prisma` och rate limitern mot Redis.
 
@@ -110,4 +151,5 @@ För större drift: byt `provider` till `postgresql` i `prisma/schema.prisma` oc
 
 - **Hall of Fame-bilderna 2024 och 2025** (`private/heroes/2024.png` och `2025.png`, serveras bara vid samtycke) är mappade till Ulf Carlsson och Johan Åhlander i den ordning bilderna kom. Byt i Admin → Heroes om det är fel.
 - 2024 års data (33 tippare, placering per omgång) är importerad från `Allsvenskantips 2025.xlsx` (flikarna omg1–30). Äldre år kan klistras in i Admin → Heroes.
+- **Spelarfoton** (`public/players`, 418 st) är nedladdade från klubbarnas sidor, API-Football och andra källor och skalade till 256 px. Bilderna kan vara upphovsrättsskyddade – håll repot privat och använd dem bara i tipset. Uppdatera arkivet: exportera `[{team, name, url}]` från databasen och kör `node scripts/download-player-photos.mjs lista.json`.
 - Demotippare, tabellhistorik före omgång 22, chatt och odds är exempeldata. Tabellen efter omgång 22 samt skytte- och assistligan är riktiga (ESPN).

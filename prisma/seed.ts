@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { TEAMS_2026, TEAMS_EARLIER } from "../src/lib/teams-data";
 import { recordSnapshot } from "../src/lib/season";
+import { applyPlayerPhotos } from "./apply-player-photos";
 import { espnLeaders, espnStandings, fillPlayerPhotos } from "../src/lib/espn";
 
 const db = new PrismaClient();
@@ -156,6 +157,9 @@ async function main() {
     // Kom ihåg exakt vilka spelare som är påhittade, så att "Rensa demodata" bara tar bort dem
     await db.setting.create({ data: { key: "demoPlayerIds", value: JSON.stringify(demoPlayers.map((p) => p.id)) } });
   }
+
+  // Sparade spelarfoton från repot (public/players) – så att en ny installation får bilderna direkt
+  console.log("Spelarfoton:", await applyPlayerPhotos(db));
 
   console.log("Användare …");
   // I drift får inga kända standardlösenord finnas: adminlösenordet måste anges, demokontona får slumpade lösenord
