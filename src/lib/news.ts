@@ -50,6 +50,12 @@ export function refreshNews(): Promise<NewsItem[]> {
   return refreshing;
 }
 
+/** Ett trasigt datum i flödet ska bara påverka den nyheten – inte kasta och tömma hela flödet. */
+function safeDate(raw: unknown): string {
+  const d = new Date(typeof raw === "string" || typeof raw === "number" ? raw : Date.now());
+  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
 async function fetchFeeds(): Promise<NewsItem[]> {
   const feeds = (process.env.NEWS_FEEDS?.split(",").map((s) => s.trim()).filter(Boolean) ?? []).length
     ? process.env.NEWS_FEEDS!.split(",").map((s) => s.trim())
@@ -74,7 +80,7 @@ async function fetchFeeds(): Promise<NewsItem[]> {
             title,
             link: String(it.link ?? ""),
             source: String(src),
-            publishedAt: new Date(it.pubDate ?? Date.now()).toISOString(),
+            publishedAt: safeDate(it.pubDate),
             image: it.enclosure?.["@url"] ?? it["media:content"]?.["@url"],
           });
         }

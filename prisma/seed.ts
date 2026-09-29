@@ -145,8 +145,12 @@ async function main() {
   }
   if (players.length < 10) {
     console.log("Spelare (demo-statistik) …");
+    const demoPlayers = [];
     for (const [name, team, goals, assists] of PLAYERS)
-      players.push(await db.player.create({ data: { seasonId: season.id, teamId: T(team), name, goals, assists } }));
+      demoPlayers.push(await db.player.create({ data: { seasonId: season.id, teamId: T(team), name, goals, assists } }));
+    players.push(...demoPlayers);
+    // Kom ihåg exakt vilka spelare som är påhittade, så att "Rensa demodata" bara tar bort dem
+    await db.setting.create({ data: { key: "demoPlayerIds", value: JSON.stringify(demoPlayers.map((p) => p.id)) } });
   }
 
   console.log("Användare …");

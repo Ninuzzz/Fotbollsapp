@@ -18,6 +18,7 @@ export default async function LeaderboardPage() {
   if (!season) return null;
   // Fullständiga namn och tips bara för bekräftade deltagare (alla kan skapa konto)
   const member = await isMember(user);
+  const showPicks = member && seasonPhase(season) !== "TIPPING";
   const [prizes, awards, history, follows] = await Promise.all([
     computePrizes(season.id),
     latestAwards(season.id),
@@ -36,7 +37,7 @@ export default async function LeaderboardPage() {
 
       <Leaderboard
         me={user?.id ?? null}
-        tipsVisible={member && seasonPhase(season) !== "TIPPING"}
+        tipsVisible={showPicks}
         entries={ranked.map((r) => ({
           id: r.id,
           userId: r.user.id,
@@ -46,8 +47,10 @@ export default async function LeaderboardPage() {
           previousRank: r.previousRank,
           errors: r.errors,
           exact: r.exact,
-          scorer: r.topScorer ? `${r.topScorer.name} (${r.topScorer.goals})` : "–",
-          assist: r.topAssist ? `${r.topAssist.name} (${r.topAssist.assists})` : "–",
+          // Utslagsfrågorna är en del av tipset: hemliga före deadline (utom ens egna), och bara för bekräftade deltagare.
+          // De skickas inte ens till webbläsaren – att dölja kolumnen i UI:t räcker inte.
+          scorer: showPicks || r.user.id === user?.id ? (r.topScorer ? `${r.topScorer.name} (${r.topScorer.goals})` : "–") : "Hemligt",
+          assist: showPicks || r.user.id === user?.id ? (r.topAssist ? `${r.topAssist.name} (${r.topAssist.assists})` : "–") : "Hemligt",
           decidedBy: r.decidedBy,
           payout: payoutById[r.id] ?? 0,
           last: losers.includes(r.id),

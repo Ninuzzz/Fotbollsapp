@@ -51,3 +51,19 @@ describe("tips kan bara sparas före deadline och efter betalning", () => {
     expect(canEditTip(season, { paymentStatus: "PENDING", freeEntry: true }, new Date("2026-04-01T12:00:00Z")).ok).toBe(true);
   });
 });
+
+describe("omdirigering efter inloggning", async () => {
+  const { safeNext } = await import("./safe-next");
+  it.each(["/\evil.com", "//evil.com", "/\/evil.com", "https://evil.com", "/%09/evil.com", "/ /evil.com", "javascript:alert(1)", ""])(
+    "skickar aldrig vidare till en extern sida: %s",
+    (next) => {
+      const out = safeNext(next);
+      expect(out.startsWith("/") && !out.startsWith("//")).toBe(true);
+      expect(new URL(out, "https://tipset.se").origin).toBe("https://tipset.se");
+    },
+  );
+  it("behåller interna sökvägar", () => {
+    expect(safeNext("/tipsa?valkommen=1#tabell")).toBe("/tipsa?valkommen=1#tabell");
+    expect(safeNext("/admin/deltagare")).toBe("/admin/deltagare");
+  });
+});

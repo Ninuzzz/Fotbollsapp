@@ -347,11 +347,16 @@ export async function archiveSeason(seasonId: string): Promise<Result> {
       userId: r.user.id,
       rankHistory: JSON.stringify(hist.map((h) => h.ranks[r.id] ?? null)),
     };
-    await db.historicalResult.upsert({
-      where: { year_name: { year: season.year, name: r.user.name } },
-      create: { year: season.year, name: r.user.name, ...data },
-      update: data,
-    });
+    // Nyckeln är kontot, inte namnet: två spelare med samma namn får inte skriva över varandras resultat.
+    // (Tabellen är unik på år + namn för Excel-importen, så en namnkrock får ett särskiljande tillägg.)
+    const existing = await db.historicalResult.findFirst({ where: { year: season.year, userId: r.user.id } });
+    if (existing) {
+      await db.historicalResult.update({ where: { id: existing.id }, data });
+      continue;
+    }
+    let name = r.user.name;
+    for (let n = 2; await db.historicalResult.findUnique({ where: { year_name: { year: season.year, name } } }); n++) name = `${r.user.name} (${n})`;
+    await db.historicalResult.create({ data: { year: season.year, name, ...data } });
   }
   return done(`${ranked.length} resultat från ${season.year} är arkiverade.`, "/heroes");
 }
@@ -432,6 +437,14 @@ export async function clearDemoData(): Promise<Result> {
   // Endast i demoläge – rör aldrig riktiga användare som registrerat sig själva
   if ((await db.setting.findUnique({ where: { key: "demoData" } }))?.value !== "true") return { ok: false, error: "Ingen demodata finns." };
   const demoUsers = { email: { endsWith: "@allsvenskantipset.se" } };
+  let demoPlayerIds: string[] = [];
+  try {
+    const raw = (await db.setting.findUnique({ where: { key: "demoPlayerIds" } }))?.value;
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) demoPlayerIds = parsed.filter((x): x is string => typeof x === "string");
+  } catch {
+    // trasig lista = rör inga spelare
+  }
   const season = await getActiveSeason();
   const latest = season
     ? await db.standingSnapshot.findFirst({ where: { seasonId: season.id }, orderBy: [{ round: "desc" }, { createdAt: "desc" }] })
@@ -445,9 +458,10 @@ export async function clearDemoData(): Promise<Result> {
     // Syntetisk tabellhistorik – senaste (riktiga) tabellen behålls
     db.standingSnapshot.deleteMany({ where: { source: "SEED", ...(latest ? { id: { not: latest.id } } : {}) } }),
     ...(latest ? [db.standingSnapshot.update({ where: { id: latest.id }, data: { source: "MANUAL" } })] : []),
-    // Spelare med demostatistik som ingen längre har tippat
-    db.player.deleteMany({ where: { scorerTips: { none: {} }, assistTips: { none: {} }, apiPlayerId: null } }),
-    db.setting.deleteMany({ where: { key: "demoData" } }),
+    // Bara de påhittade spelarna som seed-skriptet skapade (och som ingen längre har tippat). Spelare från ESPN,
+    // API-Football eller som Anders lagt in för hand rörs aldrig.
+    db.player.deleteMany({ where: { id: { in: demoPlayerIds }, scorerTips: { none: {} }, assistTips: { none: {} } } }),
+    db.setting.deleteMany({ where: { key: { in: ["demoData", "demoPlayerIds"] } } }),
   ]);
   return done("Demodata är borttagen. Aktuell tabell, Hall of Fame och historik finns kvar.", "/");
 }

@@ -130,9 +130,11 @@ export async function deleteAccount(input: { password: string; confirm: string }
   if (full.role === "ADMIN" && (await db.user.count({ where: { role: "ADMIN" } })) <= 1)
     return { ok: false, error: "Du är enda admin. Gör någon annan till admin innan du raderar ditt konto." };
   await db.$transaction([
-    // Hall of Fame: dölj namn/bild publikt (samtycket dras tillbaka)
-    db.hallOfFame.updateMany({ where: { OR: [{ userId: user.id }, { name: full.name }] }, data: { consent: false } }),
-    db.historicalResult.deleteMany({ where: { OR: [{ userId: user.id }, { name: full.name }] } }),
+    // Bara rader som är KOPPLADE till kontot. Namn går att ändra fritt, så att matcha på namn skulle låta vem som
+    // helst döpa om sig till t.ex. fjolårets vinnare och radera hens historik. Historik som importerats från
+    // Excel utan koppling tar Anders bort manuellt om personen ber om det.
+    db.hallOfFame.updateMany({ where: { userId: user.id }, data: { consent: false } }),
+    db.historicalResult.deleteMany({ where: { userId: user.id } }),
     db.user.delete({ where: { id: user.id } }),
   ]);
   const { destroySession } = await import("@/lib/auth");

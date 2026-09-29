@@ -29,10 +29,16 @@ export async function clientIp() {
   // Klienten kan själv skicka vilka IP-huvuden som helst. Lita bara på huvudet som den egna proxyn sätter
   // (TRUSTED_IP_HEADER, t.ex. "fly-client-ip" på Fly.io), annars på det SISTA ledet i X-Forwarded-For,
   // som läggs till av närmaste proxy och inte kan förfalskas av klienten.
-  const trusted = process.env.TRUSTED_IP_HEADER?.toLowerCase();
+  // På Fly.io sätts FLY_APP_NAME automatiskt, och Fly-proxyn skriver alltid över fly-client-ip.
+  const trusted = (process.env.TRUSTED_IP_HEADER || (process.env.FLY_APP_NAME ? "fly-client-ip" : "")).toLowerCase();
   if (trusted) return h.get(trusted)?.split(",")[0]?.trim() || "unknown";
+  if (process.env.NODE_ENV === "production" && !warnedIp) {
+    warnedIp = true;
+    console.warn("[säkerhet] TRUSTED_IP_HEADER är inte satt. Inloggningsspärren per IP kan då slå mot alla eller gå att kringgå.");
+  }
   return h.get("x-forwarded-for")?.split(",").at(-1)?.trim() || "unknown";
 }
+let warnedIp = false;
 
 /**
  * CSRF-skydd för route handlers (Server Actions kontrolleras redan av Next.js).
@@ -85,3 +91,4 @@ const JERSEY = /^jersey:(solid|stripes|hoops|halves|sash):#[0-9a-fA-F]{6}:#[0-9a
 export function isValidAvatar(v: string) {
   return JERSEY.test(v) || isSafeDataImage(v, 120_000);
 }
+

@@ -8,6 +8,7 @@ import { createSession, destroySession, hashPassword, verifyPassword } from "@/l
 import { getActiveSeason } from "@/lib/season";
 import { registrationOpen } from "@/lib/demo";
 import { clientIp, isValidAvatar, rateLimit } from "@/lib/security";
+import { safeNext } from "@/lib/safe-next";
 import { sanitizeText } from "@/lib/sanitize";
 import { sendNotification } from "@/lib/notify";
 
@@ -20,9 +21,13 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
   const password = String(form.get("password") ?? "").slice(0, 200);
   // Brute force-skydd: per IP och per konto
   const ip = await clientIp();
+  // Spärren per konto gäller per konto OCH IP – annars kan vem som helst låsa ute t.ex. Anders med åtta felaktiga
+  // försök. Ett generöst tak per konto bromsar ändå distribuerade attacker (bcrypt + långa lösenord gör resten).
   const a = rateLimit(`login:ip:${ip}`, 20, 15 * 60_000);
-  const b = rateLimit(`login:acct:${email}`, 8, 15 * 60_000);
-  if (!a.ok || !b.ok) return { error: `För många inloggningsförsök. Försök igen om ${Math.ceil(Math.max(a.retryAfter, b.retryAfter) / 60)} min.` };
+  const b = rateLimit(`login:acct-ip:${email}:${ip}`, 8, 15 * 60_000);
+  const c = rateLimit(`login:acct:${email}`, 200, 60 * 60_000);
+  if (!a.ok || !b.ok || !c.ok)
+    return { error: `För många inloggningsförsök. Försök igen om ${Math.ceil(Math.max(a.retryAfter, b.retryAfter, c.retryAfter) / 60)} min.` };
   const user = await db.user.findUnique({ where: { email } });
   // Kör alltid bcrypt så att svarstiden inte avslöjar om kontot finns
   const valid = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
@@ -30,8 +35,7 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
     return { error: "Fel e-post eller lösenord." };
   }
   await createSession(user.id);
-  const next = String(form.get("next") ?? "");
-  redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/min-sida");
+  redirect(safeNext(String(form.get("next") ?? "")));
 }
 
 export async function logout() {
@@ -76,16 +80,18 @@ export async function register(input: z.input<typeof registerSchema>): Promise<F
   if (await db.user.findUnique({ where: { email: d.email } })) {
     return { error: "Det finns redan ett konto med den e-postadressen.", fieldErrors: { email: "Används redan" } };
   }
-  const user = await db.user.create({
-    data: {
-      name: d.name,
-      email: d.email,
-      passwordHash: await hashPassword(d.password),
-      favoriteTeamId: d.favoriteTeamId,
-      avatar: d.avatar,
-      privacyAcceptedAt: new Date(),
-    },
-  });
+  const passwordHash = await hashPassword(d.password);
+  let user;
+  try {
+    user = await db.user.create({
+      data: { name: d.name, email: d.email, passwordHash, favoriteTeamId: d.favoriteTeamId, avatar: d.avatar, privacyAcceptedAt: new Date() },
+    });
+  } catch (e) {
+    // Två samtidiga registreringar med samma e-post: kontrollen ovan hann inte se den andra, men databasen gör det
+    if ((e as { code?: string }).code === "P2002")
+      return { error: "Det finns redan ett konto med den e-postadressen.", fieldErrors: { email: "Används redan" } };
+    throw e;
+  }
   const season = await getActiveSeason();
   if (season && (await registrationOpen(season))) {
     await db.entry.create({

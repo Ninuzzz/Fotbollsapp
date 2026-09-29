@@ -52,7 +52,9 @@ export type LeaderboardEntry = Ranked<{
 export async function computeLeaderboard(seasonId: string) {
   const snapshot = await getLatestSnapshot(seasonId);
   const entries = await db.entry.findMany({
-    where: { seasonId, submittedAt: { not: null } },
+    // Bara bekräftade deltagare (betalt eller gratisplats) är med i tabellen och kan vinna pengar.
+    // Återställer Anders en betalning till "väntar" försvinner tipparen alltså ur tabellen tills den är bekräftad igen.
+    where: { seasonId, submittedAt: { not: null }, OR: [{ paymentStatus: "CONFIRMED" }, { freeEntry: true }] },
     include: {
       rows: true,
       user: { select: { id: true, name: true, avatar: true, favoriteTeamId: true } },
