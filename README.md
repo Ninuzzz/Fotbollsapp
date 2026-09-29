@@ -141,7 +141,8 @@ Allt som behövs finns i repot: `Dockerfile`, `fly.toml`, spelarfoton (`public/p
 
 **Bra att veta om driften**
 - Tabell, ligor och nyheter hämtas varje timme av en inbyggd schemaläggare – inga cron-jobb behövs.
-- Fly tar dagliga ögonblicksbilder av disken (backup). Återställ: `fly volumes snapshots list`.
+- Fly tar dagliga ögonblicksbilder av disken (backup). Se dem: `fly volumes list --app tipset-anders` och sedan `fly volumes snapshots list <volym-id>`.
+- Glömt adminlösenordet: `fly ssh console --app tipset-anders -C "env NEW_PASSWORD=<nytt lösenord> npx tsx prisma/set-password.ts anders@allsvenskantipset.se"`.
 - Loggar: `fly logs --app tipset-anders`. Starta om: `fly apps restart tipset-anders`.
 - Spelarfotona i repot kopplas in automatiskt av seeden. Efter att trupper hämtats om: `fly ssh console -C "npm run photos:apply"`.
 
