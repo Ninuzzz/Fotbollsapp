@@ -515,3 +515,54 @@ export async function loadDemoData(): Promise<Result> {
   const r = await loadDemo(db, season.id, { recordSnapshot, production: process.env.NODE_ENV === "production" });
   return r.ok ? done(r.message, "/") : { ok: false, error: r.error };
 }
+
+// ─── Säsongsguiden ───────────────────────────────────────────────────────────
+
+/** Skapar nästa års tävling från den avslutade (datum +1 år, samma avgift, Swish och lag) och hämtar trupperna. */
+export async function createNextSeasonAction(): Promise<Result> {
+  await admin();
+  const current = await getActiveSeason();
+  if (!current) return { ok: false, error: "Ingen aktiv tävling." };
+  const { createNextSeason } = await import("@/lib/season-admin");
+  const r = await createNextSeason(current.id);
+  if (!r.ok) return { ok: false, error: r.error };
+  let extra = "";
+  try {
+    const sq = await syncSquads(r.seasonId);
+    const { applyPlayerPhotos } = await import("@/lib/player-photo-archive");
+    await applyPlayerPhotos(db);
+    extra = ` ${sq.players} spelare hämtade.`;
+  } catch {
+    extra = " Trupperna hämtas automatiskt inom ett dygn.";
+  }
+  return done(`${r.name} är skapad och aktiv.${extra} Kontrollera datumen och byt lagen i guiden.`, "/");
+}
+
+/**
+ * Byter lag enligt ESPN:s laglista. Förslaget räknas om här på servern – vad webbläsaren skickar måste stämma med det,
+ * annars görs ingenting.
+ */
+export async function swapSuggestedTeams(outIds: string[], inEspnIds: string[]): Promise<Result> {
+  await admin();
+  const season = await getActiveSeason();
+  if (!season) return { ok: false, error: "Ingen aktiv tävling." };
+  const { seasonPhase } = await import("@/lib/season");
+  if (seasonPhase(season) !== "TIPPING") return { ok: false, error: "Lag kan bara bytas automatiskt före deadline. Använd Admin → Lag." };
+  const { espnLeagueTeams } = await import("@/lib/espn");
+  const { swapTeams, teamCheck } = await import("@/lib/season-admin");
+  const check = await teamCheck(season.id, await espnLeagueTeams().catch(() => null));
+  if (check.status !== "diff") return { ok: false, error: "Lagen stämmer redan, eller så kunde ESPN inte nås. Ladda om sidan." };
+  const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
+  if (!same(outIds, check.out.map((t) => t.id)) || !same(inEspnIds, check.in.map((t) => String(t.espnId))))
+    return { ok: false, error: "Förslaget har ändrats sedan sidan laddades. Ladda om och försök igen." };
+  const r = await swapTeams(season.id, outIds, check.in);
+  if (!r.ok) return { ok: false, error: r.error };
+  try {
+    await syncSquads(season.id);
+    const { applyPlayerPhotos } = await import("@/lib/player-photo-archive");
+    await applyPlayerPhotos(db);
+  } catch {
+    // trupperna hämtas ändå automatiskt inom ett dygn
+  }
+  return done(`Klart: ${r.removed.join(", ")} ut, ${r.added.join(", ")} in. Trupperna för de nya lagen hämtas.`, "/");
+}

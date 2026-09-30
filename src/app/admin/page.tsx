@@ -1,29 +1,28 @@
 import { requireAdmin } from "@/lib/auth";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, CircleDot, Clock } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { db } from "@/lib/db";
 import { completedRound, computePrizes, getActiveSeason, getLatestSnapshot, getSeasonTeams, seasonPhase } from "@/lib/season";
 import { getPendingStandings } from "@/lib/quarantine";
 import { goLiveChecks } from "@/lib/golive";
+import { loadSeasonGuide } from "@/lib/season-guide-data";
+import { SeasonGuide } from "./season-guide";
 import { getSyncStatus } from "@/lib/health";
 import { providerOrder } from "@/lib/football-api";
 import { pushEnabled } from "@/lib/notify";
 import { oddsApiEnabled } from "@/lib/odds";
 import { demoUserCount, realParticipantCount } from "@/lib/demo-data";
-import { registrationOpen } from "@/lib/demo";
 import { Card, Stat, Badge } from "@/components/ui";
 import { fmtDateTime, kr, relative } from "@/lib/format";
 import { approvePendingStandings, clearDemoData, loadDemoData, rejectPendingStandings, runBackup, runSync, sendDeadlineReminder } from "@/app/actions/admin";
 import { ActionButton } from "./ui";
-
-type Step = { state: "done" | "now" | "todo" | "warn"; text: React.ReactNode };
 
 export default async function AdminHome() {
   // Skyddet i layouten räcker inte: sidor kan renderas utan layouten (RSC-förfrågningar)
   await requireAdmin();
   const season = await getActiveSeason();
   if (!season) return <Card>Skapa en tävling under <Link href="/admin/tavlingar" className="text-gold underline">Tävlingar</Link>.</Card>;
-  const [entries, users, snapshot, lastSyncRaw, demoFlag, prizes, teams, playerCount, real, demoUsers, regOpen, pending, checks, syncStatus, incomplete] = await Promise.all([
+  const [entries, users, snapshot, lastSyncRaw, demoFlag, prizes, teams, real, demoUsers, pending, checks, syncStatus, guide, incomplete] = await Promise.all([
     db.entry.findMany({ where: { seasonId: season.id } }),
     db.user.count(),
     getLatestSnapshot(season.id),
@@ -31,13 +30,12 @@ export default async function AdminHome() {
     db.setting.findUnique({ where: { key: "demoData" } }),
     computePrizes(season.id),
     getSeasonTeams(season.id),
-    db.player.count({ where: { seasonId: season.id } }),
     realParticipantCount(db, season.id),
     demoUserCount(db),
-    registrationOpen(season),
     getPendingStandings(season.id),
     goLiveChecks(season),
     getSyncStatus(),
+    loadSeasonGuide(season),
     db.entry.findMany({
       where: { seasonId: season.id, submittedAt: null, OR: [{ paymentStatus: "CONFIRMED" }, { freeEntry: true }] },
       include: { user: { select: { name: true } }, rows: { select: { position: true } } },
@@ -54,61 +52,8 @@ export default async function AdminHome() {
   const phase = seasonPhase(season);
   const round = snapshot ? completedRound(snapshot.rows) : 0;
   const demoOn = demoFlag?.value === "true" || demoUsers > 0;
-  // Alla lag har spelat alla omgångar (en "färdigspelad omgång" räcker inte: två lag kan ha en match kvar)
-  const allPlayed = Boolean(snapshot?.rows.length) && snapshot!.rows.every((r) => r.played >= season.totalRounds);
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const notOk = checks.filter((c) => c.state !== "ok");
-
-  // Vad händer nu? Ett steg i taget, i den ordning säsongen går
-  const steps: Step[] = [
-    {
-      state: teams.length === 16 ? "done" : "warn",
-      text: teams.length === 16 ? `16 lag i tävlingen` : <>Tävlingen har {teams.length} lag – ska vara 16. Rätta under <Link className="underline" href="/admin/lag">Lag</Link>.</>,
-    },
-    {
-      state: playerCount >= 30 ? "done" : "warn",
-      text:
-        playerCount >= 30 ? (
-          `${playerCount} spelare att välja som skytteligavinnare och assistkung`
-        ) : (
-          <>Bara {playerCount} spelare finns – tipparna behöver kunna välja skytt och assistkung. Tryck <b>Hämta trupper</b> nedan (sker annars automatiskt en gång per dygn).</>
-        ),
-    },
-    {
-      state: phase === "TIPPING" ? (regOpen ? "now" : "todo") : "done",
-      text:
-        phase === "TIPPING" ? (
-          <>
-            Anmälan och tippning pågår. Sista anmälningsdag {fmtDateTime(season.registrationDeadline)}, sista tippdag {fmtDateTime(season.editDeadline)}.
-            Påminnelser går automatiskt ut 7, 3 och 1 dag innan.
-          </>
-        ) : (
-          `Tippningen stängde ${fmtDateTime(season.editDeadline)} – alla tips är låsta och synliga`
-        ),
-    },
-    {
-      state: claimed ? "now" : confirmed ? "done" : "todo",
-      text: claimed ? <><b>{claimed}</b> väntar på att du bekräftar Swish-betalningen (<Link className="underline" href="/admin/deltagare?filter=claimed">Deltagare</Link>).</> : `${confirmed} bekräftade deltagare`,
-    },
-    {
-      state: phase === "FINISHED" || allPlayed ? "done" : round > 0 ? "now" : "todo",
-      text:
-        round > 0
-          ? `Omgång ${round} av ${season.totalRounds} är spelad. Tabellen hämtas automatiskt varje timme och alla får en notis per färdigspelad omgång.`
-          : "Väntar på första omgången. Tabellen dyker upp automatiskt när första matcherna är spelade.",
-    },
-    {
-      state: phase === "FINISHED" ? "done" : allPlayed ? "now" : "todo",
-      text:
-        phase === "FINISHED" ? (
-          <>Säsongen är avslutad. Arkivera resultaten, lägg in vinnaren under <Link className="underline" href="/admin/heroes">Heroes</Link> och skapa nästa års tävling.</>
-        ) : (
-          <>När sista omgången är spelad: tryck <b>Avsluta säsong</b> under <Link className="underline" href="/admin/tavlingar">Tävlingar</Link> – då får alla veta vem som vann.</>
-        ),
-    },
-  ];
-  const icon = { done: CheckCircle2, now: CircleDot, todo: Clock, warn: AlertTriangle };
-  const tone = { done: "text-pitch", now: "text-gold", todo: "text-muted", warn: "text-danger" };
 
   return (
     <div className="space-y-8">
@@ -188,6 +133,8 @@ export default async function AdminHome() {
         </Card>
       )}
 
+      <SeasonGuide guide={guide} seasonId={season.id} />
+
       {phase === "TIPPING" && incomplete.length > 0 && (
         <Card className="border-gold/50">
           <h3 className="font-display text-3xl">{incomplete.length} betalande har inte lämnat in ett komplett tips</h3>
@@ -228,20 +175,6 @@ export default async function AdminHome() {
         </ul>
       </Card>
 
-      <Card>
-        <h3 className="font-display text-3xl">Säsongsstatus – vad händer nu</h3>
-        <ol className="mt-4 space-y-3">
-          {steps.map((s, i) => {
-            const I = icon[s.state];
-            return (
-              <li key={i} className="flex gap-3 text-sm">
-                <I className={`mt-0.5 size-5 shrink-0 ${tone[s.state]}`} aria-label={{ done: "Klart", now: "Pågår", todo: "Senare", warn: "Behöver åtgärd" }[s.state]} />
-                <span className={s.state === "todo" ? "text-muted" : ""}>{s.text}</span>
-              </li>
-            );
-          })}
-        </ol>
-      </Card>
 
       <Card>
         <h3 className="font-display text-3xl">Automatisk data</h3>

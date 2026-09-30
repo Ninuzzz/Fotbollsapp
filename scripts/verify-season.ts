@@ -497,6 +497,78 @@ async function main() {
     void saved;
   }
 
+  console.log("\nSäsongsbytet via säsongsguiden");
+  {
+    const { createNextSeason, teamCheck, swapTeams, tableBottom } = await import("../src/lib/season-admin");
+    const { loadSeasonGuideState } = await import("../src/lib/season-guide-data");
+    const { buildSeasonGuide } = await import("../src/lib/season-guide");
+    const { recordSnapshot: record } = await import("../src/lib/season");
+    const allTeams = await db.team.findMany({ where: { id: { in: teams.map((t) => t.id) } }, orderBy: { name: "asc" } });
+
+    // En avslutad tävling 2050 med slutställning
+    const dl = new Date("2050-04-03T21:59:59.999Z");
+    const s50 = await db.season.create({
+      data: { name: "Tips Allsvenskan 2050", year: 2050, entryFee: 123, swishNumber: "0700-000000", reservedAmount: 400, prizeSplit: "60,40", startDate: new Date("2050-04-05T13:00:00Z"), registrationDeadline: dl, editDeadline: dl },
+    });
+    await db.seasonTeam.createMany({ data: allTeams.map((t) => ({ seasonId: s50.id, teamId: t.id })) });
+    await record(s50.id, allTeams.map((t, i) => ({ teamId: t.id, position: i + 1, played: 30, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 60 - i * 2, form: "" })), "MANUAL");
+    await db.season.updateMany({ data: { isActive: false } });
+    await db.season.update({ where: { id: s50.id }, data: { isActive: true, isFinished: true } });
+
+    const bottom = await tableBottom(s50.id);
+    check(bottom?.relegated.join(",") === `${allTeams[14]!.name},${allTeams[15]!.name}` && bottom?.playoff === allTeams[13]!.name, "guiden vet vilka lag som åker ur (15–16) och ska kvala (14)");
+    const g1 = buildSeasonGuide(await loadSeasonGuideState((await db.season.findUniqueOrThrow({ where: { id: s50.id } })) as never));
+    check(g1.mode === "finish" && g1.steps.find((s) => s.id === "next")?.state === "now", "avslutad säsong: guiden föreslår att skapa nästa års tävling");
+
+    const running = await db.season.create({ data: { name: "Pågår 2060", year: 2060, startDate: new Date(), registrationDeadline: new Date(), editDeadline: new Date() } });
+    check(!(await createNextSeason(running.id)).ok, "nästa års tävling kan inte skapas medan säsongen pågår");
+    await db.season.delete({ where: { id: running.id } });
+
+    const n = await createNextSeason(s50.id);
+    check(n.ok, `nästa års tävling skapas${n.ok ? ` (${n.name})` : ` – ${n.error}`}`);
+    const s51 = await db.season.findUniqueOrThrow({ where: { year: 2051 } });
+    const s50after = await db.season.findUniqueOrThrow({ where: { id: s50.id } });
+    check(s51.isActive && !s50after.isActive && s50after.isFinished, "den nya tävlingen är aktiv, den gamla är avslutad och orörd");
+    check(s51.entryFee === 123 && s51.swishNumber === "0700-000000" && s51.reservedAmount === 400 && s51.prizeSplit === "60,40", "avgift, Swish, avsatt belopp och prisfördelning kopieras");
+    check(s51.editDeadline.toISOString() === "2051-04-03T21:59:59.999Z", `sista tippdag blir samma svenska klockslag ett år senare (${s51.editDeadline.toISOString()})`);
+    check((await db.seasonTeam.count({ where: { seasonId: s51.id } })) === 16, "alla 16 lag kopieras till nästa år");
+    check(!(await createNextSeason(s50.id)).ok, "nästa års tävling kan inte skapas två gånger");
+
+    // ESPN:s laglista (påhittad): två av våra lag borta, två nya in
+    const espnOf = (list: { espnId: number; name: string }[]) =>
+      list.map((t) => ({ espnId: t.espnId, name: t.name, shortName: t.name.slice(0, 3).toUpperCase(), logo: null, color: "#112233", altColor: "#ffeedd" }));
+    const withIds = await db.team.findMany({ where: { id: { in: allTeams.map((t) => t.id) } } });
+    const ours = withIds.map((t) => ({ espnId: t.espnId!, name: t.name }));
+    const newcomers = [{ espnId: 9001, name: "Nykomling FF" }, { espnId: 9002, name: "Uppflyttad IF" }];
+    const relegated = withIds.filter((t) => [allTeams[14]!.id, allTeams[15]!.id].includes(t.id));
+    const espnList = espnOf([...ours.filter((t) => !relegated.some((r) => r.espnId === t.espnId)), ...newcomers]);
+    const prevIds = allTeams.map((t) => t.id);
+    const diff = await teamCheck(s51.id, espnList, prevIds);
+    check(diff.status === "diff" && diff.out.length === 2 && diff.in.length === 2, "guiden ser att två lag ska ut och två in");
+    check((await teamCheck(s51.id, espnOf(ours), prevIds)).status === "stale", "visar ESPN fortfarande förra årets lag föreslås inget byte");
+    check((await teamCheck(s51.id, null, prevIds)).status === "unknown", "går ESPN inte att nå säger guiden det i stället för att gissa");
+
+    // Någon har redan tippat med ett lag som skulle bort → bytet vägras
+    const tipper = await db.user.create({ data: { email: "guidetest@test.se", name: "Guide Test", passwordHash: "x" } });
+    const e = await db.entry.create({ data: { userId: tipper.id, seasonId: s51.id, paymentStatus: "CONFIRMED", rows: { create: allTeams.map((t, i) => ({ teamId: t.id, position: i + 1 })) } } });
+    const outIds = diff.status === "diff" ? diff.out.map((t) => t.id) : [];
+    const inTeams = diff.status === "diff" ? diff.in : [];
+    const refused = await swapTeams(s51.id, outIds, inTeams);
+    check(!refused.ok && (await db.seasonTeam.count({ where: { seasonId: s51.id } })) === 16, "lag som redan finns i någons tips byts inte ut (inget ändras)");
+    await db.entry.delete({ where: { id: e.id } });
+    await db.user.delete({ where: { id: tipper.id } });
+
+    const swapped = await swapTeams(s51.id, outIds, inTeams);
+    check(swapped.ok, "lagen byts när ingen har tippat");
+    const s51teams = await db.seasonTeam.findMany({ where: { seasonId: s51.id }, include: { team: true } });
+    check(s51teams.length === 16 && s51teams.some((t) => t.team.name === "Nykomling FF") && !s51teams.some((t) => outIds.includes(t.teamId)), "tävlingen har 16 lag: de nya in, de nedflyttade ut");
+    const nk = s51teams.find((t) => t.team.name === "Nykomling FF")!.team;
+    check(nk.espnId === 9001 && nk.primaryColor === "#112233", "nya lag får ESPN-id och färger från ESPN");
+    check((await db.seasonTeam.count({ where: { seasonId: s50.id } })) === 16 && (await db.seasonTeam.count({ where: { seasonId: s50.id, teamId: { in: outIds } } })) === 2, "förra årets tävling behåller sina lag");
+    check((await teamCheck(s51.id, espnList, prevIds)).status === "ok", "efter bytet stämmer lagen med ESPN");
+    check(!(await swapTeams(s51.id, [s51teams[0]!.teamId], [])).ok, "ett byte som skulle ge fel antal lag vägras");
+  }
+
   console.log(failures ? `\n✗ ${failures} kontroll(er) misslyckades` : "\n✓ Alla kontroller gick igenom");
   await db.$disconnect();
   process.exit(failures ? 1 : 0);

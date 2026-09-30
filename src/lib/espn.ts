@@ -120,12 +120,30 @@ export async function espnLeaders(seasonId: string, year?: number) {
  * Kopplar tävlingens lag till ESPN via ligans laglista. Fungerar även före seriestart (då finns ingen tabell),
  * så att nyuppflyttade lag får id och logotyp – och trupperna kan hämtas innan folk ska tippa.
  */
+export type EspnLeagueTeam = { espnId: number; name: string; shortName: string; logo: string | null; color: string | null; altColor: string | null };
+let leagueTeamsCache: { at: number; teams: EspnLeagueTeam[] } | null = null;
+
+/** Ligans lag enligt ESPN just nu (cachas 6 h – används av admin-guiden vid varje sidvisning). */
+export async function espnLeagueTeams(): Promise<EspnLeagueTeam[]> {
+  if (leagueTeamsCache && Date.now() - leagueTeamsCache.at < 6 * 3600_000) return leagueTeamsCache.teams;
+  const d = await get<{
+    sports?: { leagues?: { teams?: { team: EspnTeam & { abbreviation?: string; color?: string; alternateColor?: string } }[] }[] }[];
+  }>(`/site/v2/sports/soccer/${LEAGUE}/teams`);
+  const teams = (d.sports?.[0]?.leagues?.[0]?.teams ?? []).map(({ team: t }) => ({
+    espnId: Number(t.id),
+    name: t.displayName,
+    shortName: (t.abbreviation ?? t.displayName.slice(0, 3)).toUpperCase().slice(0, 6),
+    logo: t.logos?.find((l) => l.rel.includes("dark"))?.href ?? t.logos?.[0]?.href ?? null,
+    color: t.color ? `#${t.color}` : null,
+    altColor: t.alternateColor ? `#${t.alternateColor}` : null,
+  }));
+  leagueTeamsCache = { at: Date.now(), teams };
+  return teams;
+}
+
 export async function linkEspnTeams(seasonId: string) {
   const teams = await getSeasonTeams(seasonId);
-  const d = await get<{ sports?: { leagues?: { teams?: { team: EspnTeam & { logos?: { href: string; rel: string[] }[] } }[] }[] }[] }>(
-    `/site/v2/sports/soccer/${LEAGUE}/teams`,
-  );
-  const list = d.sports?.[0]?.leagues?.[0]?.teams?.map((x) => x.team) ?? [];
+  const list = (await espnLeagueTeams()).map((t) => ({ id: String(t.espnId), displayName: t.name, logo: t.logo }));
   let linked = 0;
   const missing: string[] = [];
   for (const t of teams) {
@@ -135,8 +153,7 @@ export async function linkEspnTeams(seasonId: string) {
       missing.push(t.name);
       continue;
     }
-    const logo = hit.logos?.find((l) => l.rel.includes("dark"))?.href ?? hit.logos?.[0]?.href ?? null;
-    await db.team.update({ where: { id: t.id }, data: { espnId: Number(hit.id), logoUrl: t.logoUrl ?? logo } });
+    await db.team.update({ where: { id: t.id }, data: { espnId: Number(hit.id), logoUrl: t.logoUrl ?? hit.logo } });
     linked++;
   }
   return { linked, missing };
