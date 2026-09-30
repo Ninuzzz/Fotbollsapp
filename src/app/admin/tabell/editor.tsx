@@ -20,6 +20,7 @@ const COLS: [keyof Row, string][] = [
 export function StandingsEditor({ teams, initial }: { teams: { id: string; name: string }[]; initial: Row[] }) {
   const [rows, setRows] = useState(initial);
   const [notify, setNotify] = useState(true);
+  const [force, setForce] = useState(false);
   const { pending, result, run } = useAdminAction();
   const name = new Map(teams.map((t) => [t.id, t.name]));
 
@@ -98,8 +99,17 @@ export function StandingsEditor({ teams, initial }: { teams: { id: string; name:
         <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="size-4 accent-[var(--gold)]" />
         Skicka notis om uppdateringen och veckans utmärkelser
       </label>
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} className="mt-0.5 size-4 accent-[var(--gold)]" />
+        <span>
+          Spara ändå, även om kontrollerna anmärker
+          <span className="block text-xs text-muted">
+            Tabellen kontrolleras innan den sparas (placeringar 1–16, V+O+F = spelade, poäng = 3×V+O, målen går ihop). Bocka i bara om siffrorna stämmer, t.ex. vid poängavdrag.
+          </span>
+        </span>
+      </label>
       <div className="flex items-center gap-3">
-        <Button variant="gold" disabled={pending} onClick={() => run(() => saveStandings({ rows, notify }))}>
+        <Button variant="gold" disabled={pending} onClick={() => run(() => saveStandings({ rows, notify, force }), () => setForce(false))}>
           {pending ? "Sparar…" : "Spara tabell & räkna om"}
         </Button>
         <ResultText result={result} />

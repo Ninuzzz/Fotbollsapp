@@ -1,0 +1,18 @@
+# Dagligt kontrakttest mot ESPN:s tabell-API (odokumenterat, saknar SLA). Faller det får repoägaren ett mejl från GitHub.
+name: ESPN-kontroll
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsx scripts/check-espn.ts

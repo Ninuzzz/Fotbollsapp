@@ -23,7 +23,8 @@ export default async function RegisterPage() {
                 swishNumber: season.swishNumber,
                 registrationDeadline: season.registrationDeadline.toISOString(),
                 open,
-                demo,
+                // Demotipset om att inte swisha på riktigt gäller bara när anmälan faktiskt är öppen
+                demo: demo && open,
               }
             : null
         }

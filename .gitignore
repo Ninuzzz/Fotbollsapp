@@ -43,6 +43,12 @@ next-env.d.ts
 # databas
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
+# backuper (innehåller personuppgifter – ska aldrig in i git)
+*.db.gz
+*.db.gz.enc
+/prisma/backups/
 .env
 !.env.example
 

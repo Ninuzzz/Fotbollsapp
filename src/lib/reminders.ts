@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { sendNotification } from "./notify";
 import type { Season } from "./season";
+import { stockholmParts } from "./time";
 
 /**
  * Deadline-påminnelser till de som inte lämnat in tips.
@@ -10,6 +11,10 @@ export async function remindMissing(season: Season, force = false) {
   const days = Math.ceil((season.editDeadline.getTime() - Date.now()) / 864e5);
   if (days < 0) return "Deadline har passerat.";
   if (!force && ![7, 3, 1].includes(days)) return `Ingen påminnelse idag (${days} dagar kvar).`;
+  // Bara på dagtid (svensk tid). Utan det skickas påminnelsen vid deadlinens klockslag, t.ex. strax före midnatt.
+  // "Dagar kvar" gäller ett helt dygn, så nästa körning på dagtid hinner alltid före nästa dagsteg.
+  const { hour } = stockholmParts();
+  if (!force && (hour < 9 || hour >= 20)) return "Väntar till dagtid med påminnelsen.";
   const key = `reminder:${season.id}:${days}`;
   if (!force && (await db.setting.findUnique({ where: { key } }))) return "Påminnelse redan skickad idag.";
   const r = await sendNotification({

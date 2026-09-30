@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   DndContext,
   closestCenter,
@@ -29,9 +29,12 @@ export function TipForm({
   initialOrder,
   initialScorer,
   initialAssist,
-  locked,
+  locked: lockedByServer,
   odds,
   showStats,
+  year,
+  deadline,
+  serverNow,
 }: {
   teams: Team[];
   players: Player[];
@@ -41,7 +44,22 @@ export function TipForm({
   locked: boolean;
   odds: OddsBoard;
   showStats: boolean;
+  year: number;
+  /** Sista tidpunkt att spara (ISO) och serverns klocka när sidan renderades – formuläret låses av sig självt vid deadline */
+  deadline: string;
+  serverNow: number;
 }) {
+  const [expired, setExpired] = useState(false);
+  const locked = lockedByServer || expired;
+  useEffect(() => {
+    if (lockedByServer) return;
+    // Serverns tid, inte webbläsarens: en klocka som går före ska inte låsa formuläret för tidigt
+    const offset = serverNow - Date.now();
+    const end = new Date(deadline).getTime();
+    const t = setInterval(() => Date.now() + offset >= end && setExpired(true), 1000);
+    return () => clearInterval(t);
+  }, [lockedByServer, serverNow, deadline]);
+
   const [rows, setRows] = useState<Row[]>(initialOrder.map((teamId, i) => ({ key: `r${i}`, teamId })));
   const [scorer, setScorer] = useState(initialScorer);
   const [assist, setAssist] = useState(initialAssist);
@@ -81,6 +99,8 @@ export function TipForm({
       const res = await saveTip({ order: rows.map((r) => r.teamId ?? ""), topScorerId: scorer, topAssistId: assist });
       setStatus({ ok: res.ok, text: res.ok ? res.message! : res.error! });
       if (res.ok) setDirty(false);
+      // Servern är facit: nekas sparningen för att deadline passerat låses formuläret direkt
+      else if (res.locked) setExpired(true);
     });
 
   const canSave = validation.ok && !locked;
@@ -96,7 +116,7 @@ export function TipForm({
       <section aria-labelledby="tabell-rubrik">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 id="tabell-rubrik" className="font-display text-3xl">
-            Sluttabell 2026
+            Sluttabell {year}
           </h2>
           {!locked && (
             <div className="flex gap-2">

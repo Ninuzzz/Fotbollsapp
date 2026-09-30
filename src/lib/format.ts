@@ -34,3 +34,11 @@ export function fromLocalInput(v: string) {
   const utc = new Date(guess.toLocaleString("en-US", { timeZone: "UTC" }));
   return new Date(guess.getTime() - (local.getTime() - utc.getTime()));
 }
+
+/**
+ * Deadline från datetime-local: gäller t.o.m. den angivna minuten. "23:59" lagras som 23:59:59.999, så att den som
+ * tippar 23:59:30 inte nekas fast sidan säger att man kan tippa till 23:59.
+ */
+export function fromLocalDeadline(v: string) {
+  return new Date(fromLocalInput(v).getTime() + 59_999);
+}

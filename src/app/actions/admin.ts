@@ -8,14 +8,17 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { apiUser } from "@/lib/auth";
-import { computePrizes, getActiveSeason, getSeasonTeams, recordSnapshot } from "@/lib/season";
+import { getActiveSeason, getSeasonTeams, recordSnapshot } from "@/lib/season";
 import { sendNotification, type Audience, type NotificationType } from "@/lib/notify";
 import { clearDemoData as clearDemo, loadDemoData as loadDemo } from "@/lib/demo-data";
 import { applyStandings, syncFromApi, syncPhotosFromApiFootball, syncSquads, testApiFootball } from "@/lib/football-api";
 import { fillPlayerPhotos } from "@/lib/espn";
 import { oddsApiEnabled, syncOdds } from "@/lib/odds";
 import { isSafeDataImage, isSafeUrl } from "@/lib/security";
-import { fromLocalInput } from "@/lib/format";
+import { fromLocalDeadline, fromLocalInput } from "@/lib/format";
+import { FROZEN_MESSAGE, finalizeSeason, reopenSeason, seasonFrozen } from "@/lib/finish";
+import { clearPendingStandings, getPendingStandings } from "@/lib/quarantine";
+import { createBackup } from "@/lib/backup";
 
 type Result = { ok: boolean; message?: string; error?: string };
 
@@ -24,6 +27,9 @@ async function admin() {
   if (!u) throw new Error("Behörighet saknas");
   return u;
 }
+
+/** Tillhör deltagandet en avslutad (frusen) säsong? */
+const entryFrozen = async (entryId: string) => seasonFrozen((await db.entry.findUnique({ where: { id: entryId }, select: { seasonId: true } }))?.seasonId);
 
 const done = (message: string, ...paths: string[]): Result => {
   for (const p of paths.length ? paths : ["/admin"]) revalidatePath(p, "layout");
@@ -60,13 +66,16 @@ export async function saveSeason(input: z.input<typeof seasonSchema>): Promise<R
   const p = seasonSchema.safeParse(input);
   if (!p.success) return { ok: false, error: p.error.issues[0]?.message };
   const { id, copyTeamsFrom, ...d } = p.data;
+  // Deadlines gäller t.o.m. den angivna minuten (23:59 betyder 23:59:59), annars förlorar folk sista minuten
   const data = {
     ...d,
     startDate: fromLocalInput(d.startDate),
-    registrationDeadline: fromLocalInput(d.registrationDeadline),
-    editDeadline: fromLocalInput(d.editDeadline),
+    registrationDeadline: fromLocalDeadline(d.registrationDeadline),
+    editDeadline: fromLocalDeadline(d.editDeadline),
   };
   if (data.editDeadline > data.startDate) return { ok: false, error: "Sista editeringsdag bör vara före seriestart." };
+  if (data.registrationDeadline > data.editDeadline) return { ok: false, error: "Sista anmälningsdag kan inte vara efter sista dag att ändra tips." };
+  if (id && (await seasonFrozen(id))) return { ok: false, error: FROZEN_MESSAGE };
   let season;
   if (id) season = await db.season.update({ where: { id }, data });
   else {
@@ -108,26 +117,11 @@ export async function activateSeason(id: string): Promise<Result> {
   return done("Aktiv tävling bytt.", "/");
 }
 
-export async function finishSeason(id: string, finished: boolean): Promise<Result> {
+/** Avsluta säsongen (eller öppna den igen). Reglerna finns i finalizeSeason/reopenSeason (lib/finish.ts). */
+export async function finishSeason(id: string, finished: boolean, force = false): Promise<Result> {
   await admin();
-  const season = await db.season.update({ where: { id }, data: { isFinished: finished } });
-  if (finished) {
-    const key = `finishedAnnounced:${id}`;
-    if (!(await db.setting.findUnique({ where: { key } }))) {
-      const { payouts, ranked } = await computePrizes(id);
-      const nameOf = new Map(ranked.map((r) => [r.id, r.user.name]));
-      const lines = payouts.map((p) => `${p.rank}:a ${nameOf.get(p.id) ?? "?"} – ${p.amount} kr${p.shared > 1 ? " (delad)" : ""}`);
-      await sendNotification({
-        type: "RESULTS",
-        title: `${season.name} är avgjort! 🏆`,
-        body: lines.length ? lines.join("\n") : "Slutställningen är klar.",
-        link: "/tipstabell",
-        seasonId: id,
-      });
-      await db.setting.create({ data: { key, value: new Date().toISOString() } });
-    }
-  }
-  return done(finished ? "Säsongen är avslutad och alla har fått veta vem som vann." : "Säsongen är öppnad igen.", "/");
+  const r = finished ? await finalizeSeason(id, force) : await reopenSeason(id);
+  return r.ok ? done(r.message ?? "Klart.", "/") : { ok: false, error: r.error };
 }
 
 // ─── Lag ──────────────────────────────────────────────────────────────────
@@ -175,6 +169,7 @@ export async function savePlayer(input: z.input<typeof playerSchema>): Promise<R
   await admin();
   const season = await getActiveSeason();
   if (!season) return { ok: false, error: "Ingen aktiv säsong" };
+  if (season.isFinished) return { ok: false, error: FROZEN_MESSAGE };
   const p = playerSchema.safeParse(input);
   if (!p.success) return { ok: false, error: p.error.issues[0]?.message };
   const { id, ...data } = p.data;
@@ -189,6 +184,7 @@ export async function savePlayer(input: z.input<typeof playerSchema>): Promise<R
 
 export async function deletePlayer(id: string): Promise<Result> {
   await admin();
+  if (await seasonFrozen((await db.player.findUnique({ where: { id }, select: { seasonId: true } }))?.seasonId)) return { ok: false, error: FROZEN_MESSAGE };
   const used = await db.entry.count({ where: { OR: [{ topScorerId: id }, { topAssistId: id }] } });
   if (used) return { ok: false, error: `Spelaren är tippad av ${used} deltagare och kan inte tas bort.` };
   await db.player.delete({ where: { id } });
@@ -208,7 +204,7 @@ const rowSchema = z.object({
   points: z.coerce.number().int().min(0).max(200),
 });
 
-export async function saveStandings(input: { rows: z.input<typeof rowSchema>[]; notify: boolean }): Promise<Result> {
+export async function saveStandings(input: { rows: z.input<typeof rowSchema>[]; notify: boolean; force?: boolean }): Promise<Result> {
   await admin();
   const season = await getActiveSeason();
   if (!season) return { ok: false, error: "Ingen aktiv säsong" };
@@ -223,9 +219,32 @@ export async function saveStandings(input: { rows: z.input<typeof rowSchema>[]; 
     rows.data.map((r, i) => ({ ...r, position: i + 1, form: "" })),
     "MANUAL",
     input.notify,
+    { force: input.force === true },
   );
+  if (result.blocked) return { ok: false, error: result.message };
+  if (result.issues) return { ok: false, error: `${result.message} Kontrollera siffrorna, eller bocka i "Spara ändå" om de stämmer (t.ex. vid poängavdrag).` };
   if (!result.recorded) return { ok: false, error: `${result.message}. Fyll i spelade matcher per lag.` };
   return done(`${result.message}. Tipstabellen är omräknad.`, "/");
+}
+
+/** Admin har granskat en tabell i karantän (se quarantine.ts) och godkänner den. */
+export async function approvePendingStandings(): Promise<Result> {
+  await admin();
+  const season = await getActiveSeason();
+  if (!season) return { ok: false, error: "Ingen aktiv säsong" };
+  const pending = await getPendingStandings(season.id);
+  if (!pending) return { ok: false, error: "Ingen tabell väntar på godkännande." };
+  const result = await applyStandings(season.id, pending.rows, "API", true, { force: true, provider: pending.provider });
+  if (result.blocked) return { ok: false, error: result.message };
+  return done(`${result.message}. Tipstabellen är omräknad.`, "/");
+}
+
+export async function rejectPendingStandings(): Promise<Result> {
+  await admin();
+  const season = await getActiveSeason();
+  if (!season) return { ok: false, error: "Ingen aktiv säsong" };
+  await clearPendingStandings(season.id);
+  return done("Tabellen avvisades. Den senaste giltiga tabellen ligger kvar och nästa synk försöker igen.", "/");
 }
 
 // ─── Deltagare ────────────────────────────────────────────────────────────
@@ -233,6 +252,7 @@ export async function saveStandings(input: { rows: z.input<typeof rowSchema>[]; 
 export async function setPayment(entryId: string, status: "PENDING" | "CLAIMED" | "CONFIRMED"): Promise<Result> {
   await admin();
   if (!["PENDING", "CLAIMED", "CONFIRMED"].includes(status)) return { ok: false };
+  if (await entryFrozen(entryId)) return { ok: false, error: FROZEN_MESSAGE };
   const entry = await db.entry.update({
     where: { id: entryId },
     data: { paymentStatus: status, paidAt: status === "CONFIRMED" ? new Date() : null },
@@ -253,6 +273,7 @@ export async function setPayment(entryId: string, status: "PENDING" | "CLAIMED" 
 
 export async function setFreeEntry(entryId: string, free: boolean): Promise<Result> {
   await admin();
+  if (await entryFrozen(entryId)) return { ok: false, error: FROZEN_MESSAGE };
   await db.entry.update({ where: { id: entryId }, data: { freeEntry: free } });
   return done("Uppdaterat.", "/");
 }
@@ -269,6 +290,7 @@ export async function setRole(userId: string, role: "USER" | "ADMIN"): Promise<R
 
 export async function deleteEntry(entryId: string): Promise<Result> {
   await admin();
+  if (await entryFrozen(entryId)) return { ok: false, error: FROZEN_MESSAGE };
   await db.entry.delete({ where: { id: entryId } });
   return done("Deltagandet är borttaget.", "/");
 }
@@ -453,6 +475,17 @@ export async function runSync(what: "standings" | "squads" | "odds" | "photos" |
     }
     const r = await syncFromApi(season.id);
     return r.ok ? done(r.log.join(" · "), "/") : { ok: false, error: r.log.join(" · ") };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message.slice(0, 300) };
+  }
+}
+
+/** Tar en kontrollerad backup nu (finns också nattligen och runt deadline). */
+export async function runBackup(): Promise<Result> {
+  await admin();
+  try {
+    const b = await createBackup("manuell");
+    return done(`Backup klar (${(b.bytes / 1024).toFixed(0)} kB, kontrollerad).`);
   } catch (e) {
     return { ok: false, error: (e as Error).message.slice(0, 300) };
   }

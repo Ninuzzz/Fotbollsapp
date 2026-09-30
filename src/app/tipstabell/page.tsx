@@ -7,6 +7,7 @@ import { Reveal } from "@/components/motion";
 import { kr } from "@/lib/format";
 import { publicAvatar, publicName, publicUser } from "@/lib/privacy";
 import { isMember } from "@/lib/chat-access";
+import { SyncNotice } from "@/components/sync-notice";
 import { Leaderboard } from "./leaderboard";
 
 export const metadata = { title: "Tipstabellen" };
@@ -33,6 +34,8 @@ export default async function LeaderboardPage() {
     <div className="mx-auto max-w-7xl px-4 py-8 md:px-6 md:py-12">
       <PageHeader kicker={`${season.name} · efter omgång ${round}`} title="Tipstabellen">
         Minst antal fel leder. Vid lika avgör skytteligan, sedan assistligan och sist antal exakta placeringar. Prispott just nu: <strong className="text-gold">{kr(pool)}</strong>.
+        <SyncNotice season={season} />
+        {season.isFinished && <span className="mt-2 block text-sm font-semibold text-pitch">Säsongen är avslutad och slutresultatet är fastställt.</span>}
       </PageHeader>
 
       <Leaderboard

@@ -8,7 +8,8 @@ primary_region = "arn" # Stockholm
     NEXT_PUBLIC_VAPID_PUBLIC_KEY = "BF0TeENTp-xJa11ORLmPqkMueIDWaCODzVJQuhydXO7B66L_Rmh81xy5Fm21dxOkJZ-I6qjUHiKYT7wJ5afpuEM"
 
 [env]
-  DATABASE_URL = "file:/data/tipset.db"
+  # socket_timeout=15: väntetid (sekunder) när databasen är upptagen, i stället för standardens 5 – ingen sparning ska falla bort
+  DATABASE_URL = "file:/data/tipset.db?socket_timeout=15"
   NODE_ENV = "production"
   TRUSTED_IP_HEADER = "fly-client-ip"
 
@@ -20,7 +21,7 @@ primary_region = "arn" # Stockholm
 [http_service]
   internal_port = 3000
   force_https = true
-  # En maskin som alltid är igång: SQLite på en volym, och schemaläggaren hämtar tabellen varje timme
+  # En maskin som alltid är igång: SQLite på en volym, och schemaläggaren hämtar tabellen (var 10:e minut på matchdagar)
   auto_stop_machines = "off"
   auto_start_machines = true
   min_machines_running = 1
@@ -29,7 +30,8 @@ primary_region = "arn" # Stockholm
     grace_period = "30s"
     interval = "30s"
     method = "GET"
-    path = "/logga-in"
+    # Kontrollerar även att databasen svarar (SELECT 1), inte bara att en sida kan renderas
+    path = "/api/health"
     timeout = "5s"
 
 [[vm]]
