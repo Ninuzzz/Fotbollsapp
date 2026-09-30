@@ -1,0 +1,39 @@
+# Nattlig, krypterad off-site-backup. Hämtar en kontrollerad kopia från /api/backup (krypterad på servern med
+# BACKUP_PASSPHRASE) och sparar den som artefakt i 30 dagar. Se docs/DRIFT.md.
+#
+# Kräver tre repo-hemligheter (Settings → Secrets and variables → Actions):
+#   APP_URL            t.ex. https://tipset-anders.fly.dev
+#   CRON_SECRET        samma värde som på servern
+#   (BACKUP_PASSPHRASE behövs bara på servern och vid återställning – inte här)
+# Utan hemligheterna gör jobbet ingenting.
+name: Backup
+on:
+  schedule:
+    - cron: "43 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      APP_URL: ${{ secrets.APP_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Hämta krypterad backup
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::notice::APP_URL/CRON_SECRET saknas – ingen backup hämtad (se docs/DRIFT.md)."
+            exit 0
+          fi
+          curl --fail --silent --show-error --max-time 120 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/backup" -o backup.db.gz.enc
+          # En hel krypterad backup börjar med "ATB1". Allt annat är ett felsvar, och då ska jobbet larma.
+          head -c 4 backup.db.gz.enc | grep -q '^ATB1' || { echo "::error::Svaret är inte en krypterad backup"; head -c 300 backup.db.gz.enc; exit 1; }
+          ls -l backup.db.gz.enc
+      - name: Spara som artefakt (30 dagar)
+        if: hashFiles('backup.db.gz.enc') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: tipset-backup-${{ github.run_id }}
+          path: backup.db.gz.enc
+          retention-days: 30
+          if-no-files-found: error

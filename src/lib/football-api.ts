@@ -9,18 +9,26 @@
  */
 import { db } from "./db";
 import { matchTeam } from "./teams-data";
-import { recordSnapshot, getSeasonTeams, awardText, migrateSnapshotRounds } from "./season";
+import { recordSnapshot, getSeasonTeams, getLatestSnapshot, awardText, migrateSnapshotRounds, repairLeaderboards } from "./season";
 import { sendNotification } from "./notify";
 import { espnLeaders, espnSquads, espnStandings, fillPlayerPhotos, type StandingRowInput } from "./espn";
+import { validateStandings } from "./standings-validation";
+import { clearPendingStandings, holdStandings } from "./quarantine";
+import { withLock } from "./sync-lock";
 
 const AF_BASE = process.env.API_FOOTBALL_BASE ?? "https://v3.football.api-sports.io";
 
 export type Provider = "espn" | "api-football";
 
+/**
+ * Källor i turordning. ESPN kräver ingen nyckel. Finns en API-Football-nyckel används den som reserv när ESPN är nere
+ * eller ger en tabell som inte klarar kontrollerna (FOOTBALL_PROVIDER=api-football vänder på ordningen).
+ * Obs: gratisplanen har historiskt bara täckt äldre säsonger – då misslyckas reserven tyst och loggas.
+ */
 export function providerOrder(): Provider[] {
   const wanted = (process.env.FOOTBALL_PROVIDER ?? "espn") as Provider;
-  if (wanted === "api-football" && process.env.API_FOOTBALL_KEY) return ["api-football", "espn"];
-  return ["espn"];
+  if (!process.env.API_FOOTBALL_KEY) return ["espn"];
+  return wanted === "api-football" ? ["api-football", "espn"] : ["espn", "api-football"];
 }
 
 /** Automatisk synk är alltid möjlig (ESPN kräver ingen nyckel) */
@@ -52,7 +60,7 @@ type AfPlayer = {
   statistics: { team: { id: number; name: string }; goals: { total: number | null; assists: number | null } }[];
 };
 
-async function apiFootball(seasonId: string, leagueId: number, year: number) {
+async function apiFootball(seasonId: string, leagueId: number, year: number, check: (rows: StandingRowInput[]) => void) {
   const teams = await getSeasonTeams(seasonId);
   const log: string[] = [];
   const resp = await af<{ league: { standings: AfStanding[][] } }[]>(`/standings?league=${leagueId}&season=${year}`);
@@ -82,6 +90,8 @@ async function apiFootball(seasonId: string, leagueId: number, year: number) {
       form: s.form ?? "",
     });
   }
+  // Tabellen kontrolleras innan spelarstatistiken skrivs, så att en trasig hämtning inte ändrar något alls
+  check(rows);
   for (const kind of ["topscorers", "topassists"] as const) {
     const list = await af<AfPlayer[]>(`/players/${kind}?league=${leagueId}&season=${year}`);
     for (const p of list) {
@@ -102,17 +112,44 @@ async function apiFootball(seasonId: string, leagueId: number, year: number) {
 
 // ─── Gemensam synk ────────────────────────────────────────────────────────
 
+/** En tabell som hämtats men inte klarar kontrollerna. Publiceras inte – hamnar i karantän för admin att granska. */
+class SuspectStandings extends Error {
+  constructor(
+    public issues: string[],
+    public rows: StandingRowInput[],
+  ) {
+    super(`Tabellen ser inte rätt ut: ${issues[0]}`);
+  }
+}
+
+const toPending = (rows: StandingRowInput[]) => rows.map((r) => ({ ...r, form: r.form ?? "" }));
+
 export async function syncFromApi(seasonId: string) {
   const season = await db.season.findUniqueOrThrow({ where: { id: seasonId } });
-  const teamCount = (await getSeasonTeams(seasonId)).length;
+  if (season.isFinished)
+    return { ok: false, log: ["Säsongen är avslutad och frusen – ingen synk. Öppna den igen under Tävlingar om något måste rättas."] };
+  const teams = await getSeasonTeams(seasonId);
+  const teamCount = teams.length;
+  const names = new Map(teams.map((t) => [t.id, t.name]));
+  const previous = (await getLatestSnapshot(seasonId))?.rows ?? null;
   const log: string[] = [];
   let rows: StandingRowInput[] | null = null;
   let used: Provider | null = null;
+  let suspect: { provider: Provider; error: SuspectStandings } | null = null;
+
+  // Körs på varje källas tabell INNAN något sparas eller några spelare uppdateras
+  const check = (r: StandingRowInput[]) => {
+    if (r.length !== teamCount) throw new Error(`Tabellen innehöll ${r.length} av ${teamCount} lag – kontrollera lagen under Admin → Lag`);
+    // Före seriestart är tabellen tom eller nollad och sparas ändå inte (se applyStandings)
+    if (!r.some((x) => x.played > 0)) return;
+    const issues = validateStandings(r, { expectedTeams: teamCount, totalRounds: season.totalRounds, previous, names });
+    if (issues.length) throw new SuspectStandings(issues, r);
+  };
 
   for (const provider of providerOrder()) {
     try {
       if (provider === "api-football") {
-        const r = await apiFootball(seasonId, season.apiLeagueId, season.year);
+        const r = await apiFootball(seasonId, season.apiLeagueId, season.year, check);
         log.push(...r.log);
         rows = r.rows;
       } else {
@@ -120,26 +157,33 @@ export async function syncFromApi(seasonId: string) {
         const r = await espnStandings(seasonId, season.year);
         log.push(...r.log);
         rows = r.rows;
+        check(rows);
         if (rows.some((x) => x.played > 0)) {
           const n = await espnLeaders(seasonId, season.year);
           log.push(`ESPN: ${n} spelare i skytte-/assistligan uppdaterade`);
         }
       }
-      if (rows.length !== teamCount) throw new Error(`Tabellen innehöll ${rows.length} av ${teamCount} lag – kontrollera lagen under Admin → Lag`);
       used = provider;
       break;
     } catch (e) {
+      if (e instanceof SuspectStandings) suspect ??= { provider, error: e };
       log.push(`${provider} misslyckades: ${(e as Error).message}`);
       rows = null;
     }
   }
-  const stamp = (ok: boolean) =>
-    db.setting.upsert({
-      where: { key: "lastSync" },
-      create: { key: "lastSync", value: JSON.stringify({ at: new Date().toISOString(), provider: used, ok, log: log.slice(-4) }) },
-      update: { value: JSON.stringify({ at: new Date().toISOString(), provider: used, ok, log: log.slice(-4) }) },
-    });
+  const stamp = async (ok: boolean) => {
+    const at = new Date().toISOString();
+    const value = JSON.stringify({ at, provider: used, ok, log: log.slice(-4) });
+    await db.setting.upsert({ where: { key: "lastSync" }, create: { key: "lastSync", value }, update: { value } });
+    // Tidpunkten för senaste LYCKADE synk sparas separat: lastSync skrivs över vid varje försök, och tabellens ålder
+    // säger inget (den står legitimt still i dagar under landslagsuppehåll).
+    if (ok) await db.setting.upsert({ where: { key: "lastSyncOkAt" }, create: { key: "lastSyncOkAt", value: at }, update: { value: at } });
+  };
   if (!rows || !used) {
+    if (suspect) {
+      await holdStandings(seasonId, { provider: suspect.provider, issues: suspect.error.issues, rows: toPending(suspect.error.rows) });
+      log.push("Tabellen lades i karantän – granska och godkänn den under Admin → Översikt. Den gamla tabellen ligger kvar.");
+    }
     await stamp(false);
     return { ok: false, log };
   }
@@ -147,49 +191,101 @@ export async function syncFromApi(seasonId: string) {
   const photos = await fillPlayerPhotos(seasonId).catch(() => ({ checked: 0, found: 0 }));
   if (photos.checked) log.push(`Foton: ${photos.found} av ${photos.checked} hittade`);
 
-  const r = await applyStandings(seasonId, rows, "API");
+  const r = await applyStandings(seasonId, rows, "API", true, { provider: used });
   log.push(r.message);
+  if (r.quarantined || r.blocked) {
+    await stamp(false);
+    return { ok: false, log };
+  }
   await stamp(true);
   return { ok: true, log };
 }
 
+export type ApplyResult = {
+  recorded: boolean;
+  announced: boolean;
+  message: string;
+  /** Problem som kontrollerna hittade (tabellen sparades då inte, om inte `force` angavs) */
+  issues?: string[];
+  quarantined?: boolean;
+  /** Säsongen är avslutad – tabellen är frusen */
+  blocked?: boolean;
+};
+
 /**
  * Sparar en ny tabell och bestämmer vilka notiser som ska ut. Samma regler för synk och manuell uppdatering:
  *  - ingen tabell alls innan någon match är spelad (annars "omgång 0" till alla)
+ *  - tabellen måste klara kontrollerna (validateStandings). En API-tabell som inte gör det läggs i karantän, en manuell
+ *    avvisas med förklaring. `force` (admin godkänner efter granskning) hoppar över kontrollerna.
  *  - en notis per FÄRDIGSPELAD omgång – inte en per timme när helgens matcher spelas
- *  - admin får en påminnelse en gång när sista omgången är spelad
+ *  - admin får en påminnelse en gång när ALLA lag har spelat sista omgången
+ *  - avslutad säsong är frusen: inga ändringar
  * `notify` (manuell uppdatering): admin väljer själv, men en omgång aviseras ändå aldrig två gånger.
+ * Allt sker under synklåset, så synken, admins knapp och en extern cron aldrig skapar dubbletter.
  */
-export async function applyStandings(seasonId: string, rows: StandingRowInput[], source: "API" | "MANUAL", notify = true) {
+export async function applyStandings(
+  seasonId: string,
+  rows: StandingRowInput[],
+  source: "API" | "MANUAL",
+  notify = true,
+  opts: { force?: boolean; provider?: string | null } = {},
+): Promise<ApplyResult> {
   if (!rows.some((r) => r.played > 0)) return { recorded: false, announced: false, message: "Serien har inte startat – ingen tabell sparad" };
-  await migrateSnapshotRounds();
-  const season = await db.season.findUniqueOrThrow({ where: { id: seasonId } });
-  const result = await recordSnapshot(seasonId, rows, source);
-  if (!result.changed) return { recorded: false, announced: false, message: "Tabellen oförändrad sedan förra synken" };
-  const round = result.snapshot.round;
+  return withLock("standings", async () => {
+    const season = await db.season.findUniqueOrThrow({ where: { id: seasonId } });
+    if (season.isFinished)
+      return { recorded: false, announced: false, blocked: true, message: "Säsongen är avslutad och frusen. Öppna den igen under Tävlingar om tabellen måste rättas." };
+    await migrateSnapshotRounds();
 
-  const key = `announcedRound:${seasonId}`;
-  const last = Number((await db.setting.findUnique({ where: { key } }))?.value ?? 0);
-  let announced = false;
-  if (notify && round > 0 && round > last) {
-    await announceUpdate(seasonId, round, result.awards);
-    await db.setting.upsert({ where: { key }, create: { key, value: String(round) }, update: { value: String(round) } });
-    announced = true;
-  }
+    if (!opts.force) {
+      const teams = await getSeasonTeams(seasonId);
+      const issues = validateStandings(rows, {
+        expectedTeams: teams.length,
+        totalRounds: season.totalRounds,
+        previous: (await getLatestSnapshot(seasonId))?.rows ?? null,
+        names: new Map(teams.map((t) => [t.id, t.name])),
+      });
+      if (issues.length) {
+        if (source === "API") {
+          await holdStandings(seasonId, { provider: opts.provider ?? null, issues, rows: toPending(rows) });
+          return { recorded: false, announced: false, quarantined: true, issues, message: `Tabellen sparades inte, den ser inte rätt ut: ${issues[0]}` };
+        }
+        return { recorded: false, announced: false, issues, message: `Tabellen klarade inte kontrollerna: ${issues.join(" ")}` };
+      }
+    }
+    // En tabell som är godkänd (eller godkänd av admin) ersätter alltid en väntande i karantän
+    await clearPendingStandings(seasonId);
 
-  const doneKey = `seasonComplete:${seasonId}`;
-  if (round >= season.totalRounds && !season.isFinished && !(await db.setting.findUnique({ where: { key: doneKey } }))) {
-    await sendNotification({
-      type: "GENERAL",
-      audience: "ADMIN",
-      title: "Sista omgången är spelad 🏁",
-      body: "Kontrollera slutställningen och tryck Avsluta säsong under Admin → Tävlingar. Då får alla veta vem som vann.",
-      link: "/admin/tavlingar",
-      seasonId,
-    });
-    await db.setting.create({ data: { key: doneKey, value: new Date().toISOString() } });
-  }
-  return { recorded: true, announced, message: `Ny tabell sparad (omgång ${round})${announced ? " – notis skickad" : ""}` };
+    const result = await recordSnapshot(seasonId, rows, source);
+    await repairLeaderboards(seasonId).catch(() => {});
+    if (!result.changed) return { recorded: false, announced: false, message: "Tabellen oförändrad sedan förra synken" };
+    const round = result.snapshot.round;
+
+    const key = `announcedRound:${seasonId}`;
+    const last = Number((await db.setting.findUnique({ where: { key } }))?.value ?? 0);
+    let announced = false;
+    if (notify && round > 0 && round > last) {
+      await announceUpdate(seasonId, round, result.awards);
+      await db.setting.upsert({ where: { key }, create: { key, value: String(round) }, update: { value: String(round) } });
+      announced = true;
+    }
+
+    // "Sista omgången spelad" först när ALLA lag har spelat alla omgångar. En färdigspelad omgång räknas redan när
+    // alla utom två lag spelat, men slutresultatet är inte klart förrän även de sista uppskjutna matcherna är spelade.
+    const doneKey = `seasonComplete:${seasonId}`;
+    if (rows.every((r) => r.played >= season.totalRounds) && !(await db.setting.findUnique({ where: { key: doneKey } }))) {
+      await sendNotification({
+        type: "GENERAL",
+        audience: "ADMIN",
+        title: "Sista omgången är spelad 🏁",
+        body: "Alla lag har spelat klart. Kontrollera slutställningen och skytte-/assistligan mot allsvenskan.se och tryck sedan Avsluta säsong under Admin → Tävlingar. Då får alla veta vem som vann.",
+        link: "/admin/tavlingar",
+        seasonId,
+      });
+      await db.setting.upsert({ where: { key: doneKey }, create: { key: doneKey, value: new Date().toISOString() }, update: {} });
+    }
+    return { recorded: true, announced, message: `Ny tabell sparad (omgång ${round})${announced ? " – notis skickad" : ""}` };
+  });
 }
 
 /** Skickar notiser efter en uppdatering: resultat + veckans utmärkelser. */

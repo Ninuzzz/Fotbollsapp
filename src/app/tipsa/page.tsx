@@ -69,6 +69,9 @@ export default async function TipPage({ searchParams }: { searchParams: Promise<
         locked={locked}
         odds={odds}
         showStats={locked}
+        year={season.year}
+        deadline={season.editDeadline.toISOString()}
+        serverNow={Date.now()}
       />
     </div>
   );

@@ -4,9 +4,10 @@
  * Säkerhetsregler (riktiga användares data får ALDRIG påverkas):
  *  1. Demotippare markeras med User.isDemo. Allt som rensas hittas via den markeringen – aldrig via e-post eller namn.
  *  2. Att läsa in demodata raderar och ändrar ingenting; det lägger bara till.
- *  3. Det går inte att läsa in demodata om riktiga deltagare redan finns i den aktiva tävlingen.
+ *  3. Det går inte att läsa in demodata om riktiga deltagare redan finns i den aktiva tävlingen. Administratörer räknas
+ *     inte som riktiga deltagare här: de driver sajten och får ha ett eget deltagande medan demodatan visas.
  *  4. Tabellhistorik fylls bara på om tävlingen saknar riktig historik (högst en riktig tabell).
- *  5. Anmäler sig en riktig deltagare medan demodata är på räknas demotipparna bort ur tabell och prispott
+ *  5. Anmäler sig en riktig (icke-admin) deltagare medan demodata är på räknas demotipparna bort ur tabell och prispott
  *     (se computeLeaderboard/computePrizes).
  */
 import { randomBytes } from "node:crypto";
@@ -45,9 +46,14 @@ function rng(seed: number) {
   };
 }
 
-/** Riktiga deltagare = konton med ett deltagande i tävlingen som INTE är demotippare. */
+/**
+ * Riktiga deltagare = konton som varken är demotippare eller administratörer. Adminens eget deltagande blockerar
+ * alltså aldrig demodatan, men så fort en vanlig deltagare anmält sig gör det det.
+ */
+export const REAL_MEMBER_WHERE = { NOT: DEMO_USER_WHERE, role: { not: "ADMIN" } };
+
 export async function realParticipantCount(db: Db, seasonId: string) {
-  return db.entry.count({ where: { seasonId, user: { NOT: DEMO_USER_WHERE } } });
+  return db.entry.count({ where: { seasonId, user: REAL_MEMBER_WHERE } });
 }
 
 export async function demoUserCount(db: Db) {
@@ -59,7 +65,7 @@ export type DemoResult = { ok: true; message: string } | { ok: false; error: str
 export async function loadDemoData(db: Db, seasonId: string, opts: { recordSnapshot: RecordFn; production: boolean }): Promise<DemoResult> {
   const real = await realParticipantCount(db, seasonId);
   if (real > 0)
-    return { ok: false, error: `Det finns redan ${real} riktiga deltagare i tävlingen. Demodata läses bara in när tävlingen är tom, så att riktiga tips aldrig blandas med påhittade.` };
+    return { ok: false, error: `Det finns redan ${real} riktiga deltagare (utöver administratörer) i tävlingen. Demodata läses bara in när enbart administratörer har anmält sig, så att riktiga tips aldrig blandas med påhittade.` };
   if ((await demoUserCount(db)) > 0) return { ok: false, error: "Demodata är redan inläst." };
 
   const rand = rng(2026);

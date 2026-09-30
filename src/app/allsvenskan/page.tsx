@@ -7,7 +7,7 @@ import { LeagueTable } from "@/components/league-table";
 import { PageHeader, SectionTitle, Empty } from "@/components/ui";
 import { TeamCrest } from "@/components/team-crest";
 import { Reveal } from "@/components/motion";
-import { relative } from "@/lib/format";
+import { SyncNotice } from "@/components/sync-notice";
 
 export const metadata = { title: "Allsvenskan" };
 export const dynamic = "force-dynamic";
@@ -73,13 +73,14 @@ export default async function LeaguePage() {
       <PageHeader kicker={`Allsvenskan ${season.year}`} title="Tabell & ligor">
         {snapshot ? (
           <>
-            Efter omgång {snapshot.round} · uppdaterad {relative(snapshot.createdAt)}
-            {snapshot.source === "API" ? " automatiskt" : snapshot.source === "MANUAL" ? " manuellt av admin" : ""}.
+            Efter omgång {snapshot.round}
+            {snapshot.source === "API" ? " (automatiskt hämtad)" : snapshot.source === "MANUAL" ? " (inlagd manuellt av admin)" : ""}.
             {tipped && " Kolumnen Tips visar din tippade placering och antal fel."}
           </>
         ) : (
           "Säsongen har inte börjat än."
         )}
+        <SyncNotice season={season} />
       </PageHeader>
       {snapshot ? (
         <div className="grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">

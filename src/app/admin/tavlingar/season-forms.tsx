@@ -22,6 +22,8 @@ type S = {
   isFinished: boolean;
   teams: number;
   entries: number;
+  /** När slutresultatet fastställdes (avslutade säsonger) */
+  finalAt: string | null;
 };
 
 function Form({ initial, seasons, onDone }: { initial: Partial<S>; seasons: S[]; onDone?: () => void }) {
@@ -115,6 +117,7 @@ export function SeasonForms({ seasons }: { seasons: S[] }) {
             {s.isFinished && <Badge>Avslutad</Badge>}
             <span className="text-sm text-muted">
               {s.teams} lag · {s.entries} deltagare
+              {s.finalAt ? ` · slutresultat fastställt ${new Date(s.finalAt).toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" })}` : ""}
             </span>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -122,9 +125,25 @@ export function SeasonForms({ seasons }: { seasons: S[] }) {
               {editing === s.id ? "Stäng" : "Redigera datum & pott"}
             </Button>
             {!s.isActive && <ActionButton action={activateSeason.bind(null, s.id)}>Gör aktiv</ActionButton>}
-            <ActionButton action={finishSeason.bind(null, s.id, !s.isFinished)} confirm={s.isFinished ? undefined : "Markera säsongen som avslutad?"}>
+            <ActionButton
+              action={finishSeason.bind(null, s.id, !s.isFinished, false)}
+              confirm={
+                s.isFinished
+                  ? "Öppna säsongen igen? Tabell, spelare och betalningar kan då ändras. Avslutar du den igen och prislistan har ändrats skickas en rättelse till alla."
+                  : "Avsluta säsongen? Slutresultatet fastställs och prislistan skickas till alla. Kontrollera först skytte- och assistligan mot allsvenskan.se. Säsongen kräver att alla lag har spelat klart."
+              }
+            >
               {s.isFinished ? "Öppna igen" : "Avsluta säsong"}
             </ActionButton>
+            {!s.isFinished && (
+              <ActionButton
+                action={finishSeason.bind(null, s.id, true, true)}
+                variant="danger"
+                confirm="Avsluta ÄNDÅ, trots att inte alla lag har spelat klart? Gör bara det om du har kontrollerat slutställningen och skytte-/assistligan på allsvenskan.se. Prislistan skickas till alla direkt."
+              >
+                Avsluta ändå…
+              </ActionButton>
+            )}
             {s.isFinished && (
               <ActionButton action={archiveSeason.bind(null, s.id)} confirm="Spara slutresultatet i historiken (Heroes / all-time)?">
                 Arkivera till historiken

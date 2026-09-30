@@ -16,18 +16,18 @@ npm run dev                   # http://localhost:3000
 
 Testkonton efter seed (endast lokalt): `anders@allsvenskantipset.se` (admin, lösenord = `SEED_ADMIN_PASSWORD`, default i `prisma/seed.ts`) och `demo@allsvenskantipset.se`.
 
-Tester: `npm test` (poäng, tie-breakers, prispott, utmärkelser, tipsvalidering) och `npm run verify:season`, som spelar en hel påhittad säsong mot en egen testdatabas (`prisma/verify-season.db`) och kontrollerar tippning, förra årets tabell, notiser per omgång, uppskjutna matcher, prispott, säsongsslut, gratisplats och demodata. Kör båda innan du driftsätter en ändring.
+Tester: `npm test` (poäng, tie-breakers, prispott, utmärkelser, tipsvalidering, tabellkontroller, deadline, backup-kryptering, tidsstyrning) och `npm run verify:season`, som spelar en hel påhittad säsong mot en egen testdatabas (`prisma/verify-season.db`) och kontrollerar tippning med styrbar klocka (deadline på millisekunden), förra årets tabell, notiser per omgång, uppskjutna matcher, misstänkta tabeller i karantän, samtidiga synkar, krasch mitt i skrivning, säsongsavslut och frysning, backup, övervakning, prispott, gratisplats och demodata. Kör båda innan du driftsätter en ändring. Rutiner för drift, backup och återställning: [docs/DRIFT.md](docs/DRIFT.md).
 
-**Säsongens gång:** skapa nästa års tävling under Admin → Tävlingar – den blir aktiv direkt och trupperna hämtas. Resten sker automatiskt: påminnelser före deadline, tabell varje timme när serien startat (aldrig förra årets), en notis per färdigspelad omgång, en påminnelse till admin när sista omgången är spelad, och besked till alla med vinnarna när admin trycker Avsluta säsong. Fjolårets sistaplats får gratisplats när hen går med.
+**Säsongens gång:** skapa nästa års tävling under Admin → Tävlingar – den blir aktiv direkt och trupperna hämtas. Resten sker automatiskt: påminnelser före deadline (dagtid), tabell var 10:e minut på matchdagar och annars varje timme när serien startat (aldrig förra årets), en notis per färdigspelad omgång, en påminnelse till admin när **alla** lag har spelat sista omgången, och besked till alla med vinnarna när admin trycker Avsluta säsong. Avslutet kräver att alla lag spelat klart, fastställer slutresultatet och fryser säsongen. Fjolårets sistaplats får gratisplats när hen går med.
 
-**Demoläge:** Admin → Översikt → Läs in demodata / Rensa demodata. Demotippare är markerade (`User.isDemo`) och rensning rör aldrig riktiga konton. Demodata går bara att läsa in när tävlingen saknar riktiga deltagare, och finns riktiga deltagare räknas demotipparna bort ur tabell och prispott.
+**Demoläge:** Admin → Översikt → Läs in demodata / Rensa demodata. Demotippare är markerade (`User.isDemo`) och rensning rör aldrig riktiga konton. Demodata går att läsa in så länge bara administratörer har anmält sig till tävlingen (deras egna deltaganden rörs aldrig och visas bredvid demotipparna). Så fort en vanlig deltagare finns nekas det, och är en vanlig deltagare bekräftad räknas demotipparna bort ur tabell och prispott. Demoflaggan håller inte anmälan öppen efter sista anmälningsdag i drift.
 
 ## Funktioner
 
 | Område | Vad |
 | --- | --- |
 | Registrering | 4 steg: konto → favoritlag → avatar (tröja eller egen bild) → Swish 111 kr (QR + app-länk, "någon annan swishar" med namn/initialer). Admin bekräftar betalningen. |
-| Tipsa | 16 lag med dra-och-släpp eller rullista, röda fält vid dubbletter, utslagsfrågor (skytt + assistkung), odds från spelbolag, "fyll i enligt oddsen". Låses automatiskt vid deadline (kontrolleras på servern). |
+| Tipsa | 16 lag med dra-och-släpp eller rullista, röda fält vid dubbletter, utslagsfrågor (skytt + assistkung), odds från spelbolag, "fyll i enligt oddsen". Låses automatiskt vid deadline (kontrolleras på servern, och igen precis före skrivning). Deadline gäller t.o.m. den angivna minuten: 23:59 betyder 23:59:59. |
 | Min sida | Lagets färger + emblem + stjärnspelare, placering, fel, exakta, prognos på pris, fel per lag mot verkliga tabellen, tie-breaker-läge, egen trendgraf. |
 | Tipstabellen | Live-rankning, pilar upp/ner, "avgjort på skytteligan", prisplatser, följ tippare ("mitt gäng"), toppgänget, trendgrafer (placering/fel), veckans raket/djupdykning/jojo. Allas tips blir synliga efter deadline. |
 | Allsvenskan | Verklig tabell med officiella logotyper + din tippade placering, skytte- och assistliga med spelarfoton. |
@@ -45,18 +45,18 @@ Tester: `npm test` (poäng, tie-breakers, prispott, utmärkelser, tipsvalidering
 | Skytte- och assistliga (topp 50) | ESPN | Nej |
 | Trupper (spelare att tippa) | ESPN | Nej |
 | Spelarfoton | TheSportsDB (exakt namnmatchning så att fel person aldrig visas) | Nej (publik testnyckel) |
-| Alternativ källa | API-Football – `FOOTBALL_PROVIDER=api-football` + `API_FOOTBALL_KEY` | Ja. Faller tillbaka till ESPN vid fel. Obs: gratisnivån har historiskt bara täckt äldre säsonger – testa med knappen i Admin. |
+| Reservkälla | API-Football – `API_FOOTBALL_KEY` (används när ESPN är nere eller ger en tabell som inte klarar kontrollerna; `FOOTBALL_PROVIDER=api-football` vänder på ordningen) | Ja. Obs: gratisnivån har historiskt bara täckt äldre säsonger – testa med knappen i Admin. |
 | Odds | The Odds API (`ODDS_API_KEY`) eller manuellt i Admin → Odds | Valfri |
 | Nyheter | Google News RSS (`NEWS_FEEDS` för egna flöden) | Nej |
 
-Om en källa fallerar: Admin → Tabell / Spelare för manuell inmatning. Tipstabellen räknas om och utmärkelser koras vid varje uppdatering.
+Om en källa fallerar: Admin får en notis (efter 6 timmar fredag–söndag, 26 timmar annars) och kan mata in tabellen manuellt under Admin → Tabell (förifylld, med kontroller) och spelare under Admin → Spelare. Tipstabellen räknas om och utmärkelser koras vid varje uppdatering. En hämtad tabell som inte klarar kontrollerna (t.ex. saknade placeringar eller mål som inte går ihop) publiceras inte utan hamnar i karantän för admin att godkänna eller avvisa.
 
 ### Schemalagda jobb
 
-Servern kör själv synk, påminnelser och nyheter varje timme (inbyggd schemaläggare). Extern cron behövs bara om du stänger av den:
+Servern kör själv synk, backup, påminnelser och nyheter (inbyggd schemaläggare som tickar var 5:e minut: tabell var 10:e minut fredag–söndag kl 12–24, annars varje timme). Extern cron behövs bara om du stänger av den, och är annars ett andra, oberoende hjärtslag:
 
 ```bash
-# varje timme (synk – sparar bara ny tabell om något ändrats)
+# var 10:e–30:e minut (synk – sparar bara ny tabell om något ändrats)
 curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://<domän>/api/cron?job=sync
 # dagligen (deadline-påminnelser 7, 3 och 1 dag innan, till de som saknar tips)
 curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://<domän>/api/cron?job=reminders
@@ -65,7 +65,7 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://<domän>/api/cron?j
 ## Regler i koden
 
 - `src/lib/scoring.ts`: fel = Σ |tippad − verklig| per lag. Tie-breakers: 1) mål av tippad skytt, 2) assist av tippad assistkung, 3) flest exakta, 4) delad placering.
-- `src/lib/prizes.ts`: pott = betalande × insats − avsatt (600 kr till mugg, vandringspris och tröstpris, precis som i Excel-regeln "Det är avsatt 600 kr av potten…"). Resten 50/30/20. Delade placeringar delar summan av de prisplatser de täcker, vilket ger exakt finstilta reglerna.
+- `src/lib/prizes.ts` (beloppen avrundas nedåt till hela kronor, och kronor som blir över visas som "Ej utdelat"): pott = betalande × insats − avsatt (600 kr till mugg, vandringspris och tröstpris, precis som i Excel-regeln "Det är avsatt 600 kr av potten…"). Resten 50/30/20. Delade placeringar delar summan av de prisplatser de täcker, vilket ger exakt finstilta reglerna.
 - `src/lib/awards.ts`: raket (flest placeringar upp), djupdykning (flest ner), jojo (mest upp och ner de senaste uppdateringarna).
 
 ## GDPR
@@ -99,6 +99,10 @@ Swish Handel-API (automatisk avprickning) kräver företagsavtal och kostar per 
 - All input valideras med zod. Bilder tillåts bara som små PNG-, JPEG- eller WebP-data-URL:er eller http(s)-länkar, vilket blockerar `javascript:`-URL:er. React escapar allt användarinnehåll.
 - Tips är hemliga före deadline. Deadline och betalstatus kontrolleras alltid på servern.
 - Cron-endpointen kräver `CRON_SECRET` (minst 16 tecken) och jämförs i konstant tid.
+- **Tabellkontroll:** varje tabell (API eller manuell) kontrolleras före den sparas (`src/lib/standings-validation.ts`): placeringar, V+O+F = spelade, poäng = 3×V+O, mål gjorda = insläppta, vinster = förluster, spelade matcher minskar aldrig. Misstänkta tabeller publiceras inte.
+- **Atomär skrivning och lås:** en ny tabell och dess tipstabell sparas i en transaktion under ett lås, så samtidiga synkar och krascher aldrig ger dubbletter eller halva tabeller.
+- **Avslut:** kräver att alla lag spelat klart, fastställer och fryser slutresultatet. Backup tas före.
+- **Backup:** kontrollerade kopior (`VACUUM INTO` + integritetskontroll) nattligen och runt deadline, samt krypterad nedladdning (`/api/backup`, AES-256-GCM) för off-site-lagring.
 - `npm audit`: 0 sårbarheter (postcss och deepmerge-ts är lyfta via `overrides`).
 
 ## Driftsätt din egen kopia på Fly.io
@@ -144,8 +148,9 @@ Allt som behövs finns i repot: `Dockerfile`, `fly.toml`, spelarfoton (`public/p
 **Göra egna ändringar:** ändra koden, testa med `npm run dev` och `npm test`, och kör `fly deploy` igen. Databasen ligger på disken och påverkas inte av nya deployer. Schemaändringar i `prisma/schema.prisma` förs in automatiskt vid start (ändringar som skulle radera data vägras).
 
 **Bra att veta om driften**
-- Tabell, ligor och nyheter hämtas varje timme av en inbyggd schemaläggare – inga cron-jobb behövs.
-- Fly tar dagliga ögonblicksbilder av disken (backup). Se dem: `fly volumes list --app tipset-anders` och sedan `fly volumes snapshots list <volym-id>`.
+- Tabell, ligor och nyheter hämtas av en inbyggd schemaläggare – inga cron-jobb behövs.
+- Backup: appen tar själv kontrollerade kopior (nattligen, runt deadline, vid omstart) på disken, och Fly tar dagliga ögonblicksbilder (`fly volumes snapshots list <volym-id>`). Aktivera dessutom den krypterade off-site-backupen och övervakningen, och öva återställning: se [docs/DRIFT.md](docs/DRIFT.md). Admin → Översikt → Go-live-kontroll visar vad som återstår.
+- Hälsokontroll: `/api/health` (databas) och `/api/health?strict=1` (även tabellens ålder), lämpliga för UptimeRobot.
 - Glömt adminlösenordet: `fly ssh console --app tipset-anders -C "env NEW_PASSWORD=<nytt lösenord> npx tsx prisma/set-password.ts anders@allsvenskantipset.se"`.
 - Loggar: `fly logs --app tipset-anders`. Starta om: `fly apps restart tipset-anders`.
 - Spelarfotona i repot kopplas in automatiskt av seeden. Efter att trupper hämtats om: `fly ssh console -C "npm run photos:apply"`.
