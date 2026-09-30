@@ -29,7 +29,8 @@ async function main() {
     if (!pass) throw new Error("Sätt BACKUP_PASSPHRASE.");
     data = decryptBackup(data, pass);
   }
-  if (input!.includes(".gz")) data = gunzipSync(data);
+  // Packad fil känns igen på innehållet (gzip börjar med 1f 8b), inte på filnamnet – så att en omdöpt fil också fungerar
+  if (data[0] === 0x1f && data[1] === 0x8b) data = gunzipSync(data);
   writeFileSync(output!, data);
   const v = await verifyDatabaseFile(path.resolve(output!));
   console.log(`OK: ${output} är en hel databas – ${v.users} konton, ${v.entries} deltaganden, ${v.snapshots} tabeller.`);
